@@ -38,6 +38,8 @@ from .utils import VocabUtility
 from megatron import get_args
 import deepspeed.runtime.activation_checkpointing.checkpointing as ds_checkpointing
 
+from megatron import get_timers
+
 
 _MODEL_PARALLEL_ATTRIBUTE_DEFAULTS = {'tensor_model_parallel': False,
                                       'partition_dim': -1,
@@ -406,7 +408,10 @@ class RowParallelLinear(torch.nn.Module):
         if self.is_expert_without_slicing: # non-expert only tensor-parallelism
             output_ = output_parallel
         else:
+            timers = get_timers()
+            timers('forward-tp-all-reduce').start()
             output_ = reduce_from_tensor_model_parallel_region(output_parallel)
+            timers('forward-tp-all-reduce').stop()
 
         if not self.skip_bias_add:
             output = output_ + self.bias if self.bias is not None else output_

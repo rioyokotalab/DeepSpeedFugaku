@@ -739,6 +739,7 @@ def training_log(loss_dict, total_loss_dict, learning_rate, iteration,
     add_to_logging('forward-recv')
     add_to_logging('forward-send')
     add_to_logging('forward-backward-send-forward-backward-recv')
+    add_to_logging('forward-tp-all-reduce')
     add_to_logging('backward-compute')
     add_to_logging('backward-recv')
     add_to_logging('backward-send')
