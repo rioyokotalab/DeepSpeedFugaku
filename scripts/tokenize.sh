@@ -10,10 +10,15 @@ module load cudnn/cuda-11.x/8.9.0
 module load nccl/cuda-11.7/2.14.3
 module load openmpi/4.0.5
 
+JA_VOCAB_SIZE=40
+EN_VOCAB_SIZE=10
+
+source .env/bin/activate
+
 # Set the output directory:
-export OUTDIR=datasets/wikipedia/binarized/sentencepiece_ver1
+export OUTDIR=datasets/wikipedia/binarized/v1_ja${JA_VOCAB_SIZE}K_en${EN_VOCAB_SIZE}K
 mkdir -p $OUTDIR
-export MODELDIR=tokenizer/models/cc100ja1GB_cc100en1GB/cc100_ja40K_en10K.symbolRemoved.vocab.reestimated.model
+export MODELDIR=tokenizer/models/cc100ja1GB_cc100en1GB/cc100_ja${JA_VOCAB_SIZE}K_en${EN_VOCAB_SIZE}K.symbolRemoved.vocab.reestimated.model
 
 # Tokenize and binarize Japanese
 python tools/preprocess_data.py \
