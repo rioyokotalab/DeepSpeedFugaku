@@ -28,6 +28,7 @@ from torch.nn import LayerNorm
 from megatron.model.fused_softmax import FusedScaleMaskSoftmax
 from megatron.model.fused_bias_gelu import bias_gelu_impl
 from megatron.model.utils import attention_mask_func, openai_gelu, erf_gelu
+from megatron.model.noopLayer import NoopLayer
 from torch import distributed as dist
 import deepspeed
 from deepspeed.moe.layer import MoE
@@ -203,6 +204,8 @@ class ParallelAttention(MegatronModule):
             global get_cuda_rng_tracker, checkpoint
             get_cuda_rng_tracker = deepspeed.checkpointing.get_cuda_rng_tracker
             checkpoint = deepspeed.checkpointing.checkpoint
+        self.noopLayer_stopBaddbmm = NoopLayer('backward_baddbmm', False)
+        self.noopLayer_startBaddbmm = NoopLayer('backward_baddbmm', True)
 
     def forward(self, hidden_states, attention_mask, layer_past=None,
                 get_key_value=False, encoder_output=None):
@@ -294,6 +297,7 @@ class ParallelAttention(MegatronModule):
             device=device)
 
         # Raw attention scores. [b * np, sq, sk]
+        matmul_result = self.noopLayer_stopBaddbmm(matmul_result)
         timers('baddbmm').start()
         matmul_result = torch.baddbmm(
             matmul_result,
@@ -301,6 +305,7 @@ class ParallelAttention(MegatronModule):
             key_layer.transpose(0, 1).transpose(1, 2),  # [b * np, hn, sk]
             beta=0.0, alpha=(1.0/self.norm_factor))
         timers('baddbmm').stop()
+        matmul_result = self.noopLayer_startBaddbmm(matmul_result)
 
         # change view to [b, np, sq, sk]
         attention_scores = matmul_result.view(*output_size)
