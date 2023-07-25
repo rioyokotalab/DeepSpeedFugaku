@@ -977,7 +977,7 @@ def training_log(loss_dict, total_loss_dict, learning_rate, iteration,
             # Report memory after optimizer state has been initialized.
             report_memory('(after {} iterations)'.format(iteration))
             report_memory_flag = False
-        timers.log(timers_to_log, normalizer=args.log_interval)
+        # timers.log(timers_to_log, normalizer=args.log_interval)
 
         # Output timer data to file
         timers_to_out = []
@@ -1036,6 +1036,22 @@ def training_log(loss_dict, total_loss_dict, learning_rate, iteration,
         add_to_out('backward_step')
         add_to_out('backward-compute')
         add_to_out('allreduce_params')
+        add_to_out('forward-recv')
+        add_to_out('forward-send')
+        add_to_out('forward-backward-send-forward-backward-recv')
+        add_to_out('backward-recv')
+        add_to_out('backward-send')
+        add_to_out('backward-send-forward-recv')
+        add_to_out('backward-send-backward-recv')
+        add_to_out('backward-params-all-reduce')
+        add_to_out('backward-embedding-all-reduce')
+        add_to_out('optimizer-copy-to-main-grad')
+        add_to_out('optimizer-unscale-and-check-inf')
+        add_to_out('optimizer-clip-main-grad')
+        add_to_out('optimizer-copy-main-to-model-params')
+        add_to_out('optimizer')
+        add_to_out('batch-generator')
+        add_to_out('save-checkpoint')
         timers.out(timers_to_out, normalizer=args.log_interval)
 
     return report_memory_flag
