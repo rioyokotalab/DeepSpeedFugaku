@@ -344,6 +344,9 @@ if __name__ == "__main__":
     torch.set_flush_denormal(True)
     os.makedirs(os.environ.get('TIMER', 'timer'), exist_ok=True)
     git_ds_info()
-    pretrain(train_valid_test_datasets_provider, model_provider, forward_step,
-             args_defaults={'tokenizer_type': 'GPT2BPETokenizer'},
-             data_post_process=data_post_process)
+    from torch.profiler import profile, ProfilerActivity
+    with profile(activities=[ProfilerActivity.CPU], record_shapes=True) as prof:
+        pretrain(train_valid_test_datasets_provider, model_provider, forward_step,
+                 args_defaults={'tokenizer_type': 'GPT2BPETokenizer'},
+                 data_post_process=data_post_process)
+    print(prof.key_averages().table(sort_by="cpu_time_total", row_limit=100))
