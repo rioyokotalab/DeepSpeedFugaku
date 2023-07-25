@@ -1052,6 +1052,7 @@ def training_log(loss_dict, total_loss_dict, learning_rate, iteration,
         add_to_out('optimizer')
         add_to_out('batch-generator')
         add_to_out('save-checkpoint')
+        add_to_out('allreduce_for_backward_tp')
         timers.out(timers_to_out, normalizer=args.log_interval)
 
     return report_memory_flag

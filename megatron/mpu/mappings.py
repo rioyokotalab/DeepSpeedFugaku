@@ -17,6 +17,7 @@ import torch
 
 from .initialize import get_tensor_model_parallel_group, get_tensor_model_parallel_world_size, get_tensor_model_parallel_rank
 from .utils import split_tensor_along_last_dim
+from megatron import get_timers
 
 
 def _reduce(input_):
@@ -86,7 +87,11 @@ class _CopyToModelParallelRegion(torch.autograd.Function):
 
     @staticmethod
     def backward(ctx, grad_output):
-        return _reduce(grad_output)
+        timers = get_timers()
+        timers('allreduce_for_backward_tp').start()
+        ret = _reduce(grad_output)
+        timers('allreduce_for_backward_tp').stop()
+        return ret
 
 
 class _ReduceFromModelParallelRegion(torch.autograd.Function):
