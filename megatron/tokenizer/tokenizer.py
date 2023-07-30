@@ -300,10 +300,10 @@ class _JapaneseSentencePiece(AbstractTokenizer):
         name = 'Japanese Sentencepiece'
         super().__init__(name)
         self.tokenizer = spm.SentencePieceProcessor(model_file=vocab_file)
-        # TODO: make sure eod and pad ids are included in the pre-trained tokenizer
-        self.eod_id = self.tokenizer.piece_to_id("<|endoftext|>")
-        self.pad_id = self.tokenizer.piece_to_id("<|padding|>")
-        self.eol_symbol = "<|endofline|>"
+        # make sure eod and pad ids are included in the pre-trained tokenizer
+        self.eod_id = self.tokenizer.piece_to_id("</s>")
+        self.pad_id = self.tokenizer.piece_to_id("<pad>")
+        self.eol_symbol = "\n"
 
     @property
     def vocab_size(self):
@@ -319,14 +319,13 @@ class _JapaneseSentencePiece(AbstractTokenizer):
         raise NotImplementedError
 
     def tokenize(self, text: str):
-        # TODO: make sure this is user defined
+        # make sure this is user defined
         text = text.replace("\n", self.eol_symbol)
         text = text.replace("\r\n", self.eol_symbol)
         return self.tokenizer.encode(text)
 
     def detokenize(self, token_ids):
         text = self.tokenizer.decode(token_ids)
-        text = text.replace(self.eol_symbol, "\n")
         return text
 
     @property
