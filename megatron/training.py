@@ -20,6 +20,7 @@ import math
 import sys
 import time
 import json
+import subprocess
 # The earliest we can measure the start time.
 _TRAIN_START_TIME = time.time()
 
@@ -139,81 +140,95 @@ def pretrain(train_valid_test_dataset_provider,
     timers('model-and-optimizer-setup').stop()
     print_datetime('after model, optimizer, and learning rate '
                    'scheduler are built')
-
-    # Data stuff.
-    timers('train/valid/test-data-iterators-setup').start()
-    if args.virtual_pipeline_model_parallel_size is not None:
-        all_data_iterators = [
-            build_train_valid_test_data_iterators(train_valid_test_dataset_provider)
-            for _ in range(len(model))
-        ]
-        train_data_iterator = [data_iterators[0] for data_iterators in all_data_iterators]
-        valid_data_iterator = [data_iterators[1] for data_iterators in all_data_iterators]
-        test_data_iterator = [data_iterators[2] for data_iterators in all_data_iterators]
-    else:
-        train_data_iterator, valid_data_iterator, test_data_iterator \
-            = build_train_valid_test_data_iterators(
-                train_valid_test_dataset_provider)
-    if args.data_efficiency_curriculum_learning:
-        if args.deepspeed_dataloader is not None:
-            # We use args to pass the deepspeed_dataloader because adding
-            # output to setup_model_and_optimizer will break the API for other
-            # cases. We clear args.deepspeed_dataloader after updating
-            # train_data_iterator because args will be saved in checkpoint and
-            # attempting to save the whole deepspeed_dataloader will lead to
-            # "AttributeError: Can't pickle local object...".
-            train_data_iterator = iter(args.deepspeed_dataloader)
-            args.deepspeed_dataloader = None
-        else:
-            train_data_iterator = None
-    timers('train/valid/test-data-iterators-setup').stop()
-    print_datetime('after dataloaders are built')
-
-    # args.teacher_model is used as global variable to pass the teacher model
-    # for knowledge distillation. Users do not need to set it in the command
-    # line to use kd, but users do need to provide teacher model configurations
-    # like args.num_layers_teacher as described in setup_teacher_model()
-    args.teacher_model = None
-    if args.mos or args.kd: # Set up teacher model
-        args.teacher_model = setup_teacher_model(args, model_provider)
-
-    # Print setup timing.
-    print_rank_0('done with setup ...')
-    timers.log(['model-and-optimizer-setup', 'train/valid/test-data-iterators-setup'])
-    print_rank_0('training ...')
-
-    iteration = 0
-    if args.do_train and args.train_iters > 0:
-        iteration = train(forward_step_func,
-                          model, optimizer, lr_scheduler,
-                          train_data_iterator, valid_data_iterator)
-    print_datetime('after training is done')
-
-    if args.do_valid:
-        prefix = 'the end of training for val data'
-        evaluate_and_print_results(prefix, forward_step_func,
-                                   valid_data_iterator, model,
-                                   iteration, False)
     
-    # Clean the model and do evaluation again
-    if args.compression_training:
-        model = [redundancy_clean(model[0], args.deepspeed_config, mpu)]
-        if args.do_valid:
-            prefix = 'the end of training and after model cleaning for val data'
-            evaluate_and_print_results(prefix, forward_step_func,
-                                    valid_data_iterator, model,
-                                    iteration, False)
+    def get_model_memory(model: torch.nn.Module) -> int:
+        total_memory = 0
+        for param in model.parameters():
+            total_memory += param.element_size() * param.nelement()
+        return total_memory
+
+    memory_usage = get_model_memory(model[0])
+    print_rank_last(f'{memory_usage=}')
+    total_memory_usage = 0
+    for i in range(args.train_iters):
+        for model_module in model:
+            model_module.allreduce_gradients()
+            total_memory_usage += memory_usage
+        print_rank_last(f'{i=}, {total_memory_usage=}, {total_memory_usage/(2**30)=}')
+    # # Data stuff.
+    # timers('train/valid/test-data-iterators-setup').start()
+    # if args.virtual_pipeline_model_parallel_size is not None:
+    #     all_data_iterators = [
+    #         build_train_valid_test_data_iterators(train_valid_test_dataset_provider)
+    #         for _ in range(len(model))
+    #     ]
+    #     train_data_iterator = [data_iterators[0] for data_iterators in all_data_iterators]
+    #     valid_data_iterator = [data_iterators[1] for data_iterators in all_data_iterators]
+    #     test_data_iterator = [data_iterators[2] for data_iterators in all_data_iterators]
+    # else:
+    #     train_data_iterator, valid_data_iterator, test_data_iterator \
+    #         = build_train_valid_test_data_iterators(
+    #             train_valid_test_dataset_provider)
+    # if args.data_efficiency_curriculum_learning:
+    #     if args.deepspeed_dataloader is not None:
+    #         # We use args to pass the deepspeed_dataloader because adding
+    #         # output to setup_model_and_optimizer will break the API for other
+    #         # cases. We clear args.deepspeed_dataloader after updating
+    #         # train_data_iterator because args will be saved in checkpoint and
+    #         # attempting to save the whole deepspeed_dataloader will lead to
+    #         # "AttributeError: Can't pickle local object...".
+    #         train_data_iterator = iter(args.deepspeed_dataloader)
+    #         args.deepspeed_dataloader = None
+    #     else:
+    #         train_data_iterator = None
+    # timers('train/valid/test-data-iterators-setup').stop()
+    # print_datetime('after dataloaders are built')
+
+    # # args.teacher_model is used as global variable to pass the teacher model
+    # # for knowledge distillation. Users do not need to set it in the command
+    # # line to use kd, but users do need to provide teacher model configurations
+    # # like args.num_layers_teacher as described in setup_teacher_model()
+    # args.teacher_model = None
+    # if args.mos or args.kd: # Set up teacher model
+    #     args.teacher_model = setup_teacher_model(args, model_provider)
+
+    # # Print setup timing.
+    # print_rank_0('done with setup ...')
+    # timers.log(['model-and-optimizer-setup', 'train/valid/test-data-iterators-setup'])
+    # print_rank_0('training ...')
+
+    # iteration = 0
+    # if args.do_train and args.train_iters > 0:
+    #     iteration = train(forward_step_func,
+    #                       model, optimizer, lr_scheduler,
+    #                       train_data_iterator, valid_data_iterator)
+    # print_datetime('after training is done')
+
+    # if args.do_valid:
+    #     prefix = 'the end of training for val data'
+    #     evaluate_and_print_results(prefix, forward_step_func,
+    #                                valid_data_iterator, model,
+    #                                iteration, False)
+    
+    # # Clean the model and do evaluation again
+    # if args.compression_training:
+    #     model = [redundancy_clean(model[0], args.deepspeed_config, mpu)]
+    #     if args.do_valid:
+    #         prefix = 'the end of training and after model cleaning for val data'
+    #         evaluate_and_print_results(prefix, forward_step_func,
+    #                                 valid_data_iterator, model,
+    #                                 iteration, False)
 
 
-    if args.save and iteration != 0:
-        save_checkpoint(iteration, model, optimizer, lr_scheduler)
+    # if args.save and iteration != 0:
+    #     save_checkpoint(iteration, model, optimizer, lr_scheduler)
 
-    if args.do_test:
-        # Run on test data.
-        prefix = 'the end of training for test data'
-        evaluate_and_print_results(prefix, forward_step_func,
-                                   test_data_iterator, model,
-                                   0, True, test=True)
+    # if args.do_test:
+    #     # Run on test data.
+    #     prefix = 'the end of training for test data'
+    #     evaluate_and_print_results(prefix, forward_step_func,
+    #                                test_data_iterator, model,
+    #                                0, True, test=True)
 
 def update_train_iters(args):
 
@@ -572,9 +587,31 @@ def setup_model_and_optimizer(model_provider_func, teacher=False,
 
     return model, optimizer, lr_scheduler
 
+def forward_backward_func2(forward_step_func, data_iterator, model, optimizer, timers, iteration ,forward_only=False):
+    print_rank_last('call forward_backward_func2')
+    tmp_tensor = torch.rand(10000)
+    tmp_tensor /= mpu.get_tensor_model_parallel_world_size()
+    mpu.reduce_from_tensor_model_parallel_region(tmp_tensor)
+
+    # if is_last_rank():
+    #     print('['+str(iteration)+']'+'call in short forward_backward_func',subprocess.run("cg=`grep memory /proc/self/cgroup`;cat /sys/fs/cgroup/memory/${cg#*memory:/}/memory.max_usage_in_bytes", shell=True, encoding='utf-8', stdout=subprocess.PIPE).stdout)
+    return [{'pseudo loss':torch.tensor(1.)}]
+
+def train_step2(forward_step_func, data_iterator,
+               model, optimizer, lr_scheduler, iteration):
+    print_rank_last('call train_step2')
+    print_rank_last(f'{len(model)=}')
+    # if is_last_rank():
+    #     print('['+str(iteration)+']'+'call in short train_step before allreduce',subprocess.run("cg=`grep memory /proc/self/cgroup`;cat /sys/fs/cgroup/memory/${cg#*memory:/}/memory.max_usage_in_bytes", shell=True, encoding='utf-8', stdout=subprocess.PIPE).stdout)
+    for model_module in model:
+        model_module.allreduce_gradients()
+    # print_rank_last('in short train_step, '+subprocess.run("cg=`grep memory /proc/self/cgroup`;cat /sys/fs/cgroup/memory/${cg#*memory:/}/memory.max_usage_in_bytes", shell=True, encoding='utf-8', stdout=subprocess.PIPE).stdout)
+    # if is_last_rank():
+    #     print('['+str(iteration)+']'+'call in short train_step after allreduce',subprocess.run("cg=`grep memory /proc/self/cgroup`;cat /sys/fs/cgroup/memory/${cg#*memory:/}/memory.max_usage_in_bytes", shell=True, encoding='utf-8', stdout=subprocess.PIPE).stdout)
+    return {'pseudo_loss': torch.Tensor([1.0])}, 2, 3.0, 4
 
 def train_step(forward_step_func, data_iterator,
-               model, optimizer, lr_scheduler):
+               model, optimizer, lr_scheduler, iteration):
     """Single training step."""
     args = get_args()
     timers = get_timers()
@@ -613,7 +650,10 @@ def train_step(forward_step_func, data_iterator,
     timers('forward_backward').start()
     losses_reduced = forward_backward_func(
         forward_step_func, data_iterator, model,
-        optimizer, timers, forward_only=False)
+        optimizer, timers, 
+        #iteration,
+        forward_only=False)
+    #print('losses reduced', losses_reduced)
     timers('forward_backward').stop()
     if args.mos or args.kd:
         args.teacher_forward = False
@@ -624,6 +664,10 @@ def train_step(forward_step_func, data_iterator,
         timers('backward-params-all-reduce').start()
         for model_module in model:
             model_module.allreduce_gradients()
+        #print_rank_last('in original train_step, '+subprocess.run("cg=`grep memory /proc/self/cgroup`;cat /sys/fs/cgroup/memory/${cg#*memory:/}/memory.max_usage_in_bytes", shell=True, encoding='utf-8', stdout=subprocess.PIPE).stdout)
+        #print_rank_last('call in original train step')
+        if is_last_rank():
+            print('['+str(iteration)+']'+'call in original train_step',subprocess.run("cg=`grep memory /proc/self/cgroup`;cat /sys/fs/cgroup/memory/${cg#*memory:/}/memory.max_usage_in_bytes", shell=True, encoding='utf-8', stdout=subprocess.PIPE).stdout)
         timers('backward-params-all-reduce').stop()
     timers('allreduce_params').stop()
 
@@ -1118,11 +1162,13 @@ def train(forward_step_func, model, optimizer, lr_scheduler,
                     args.iteration + 1)
         timers('train_step').start()
         loss_dict, skipped_iter, grad_norm, num_zeros_in_grad = \
-            train_step(forward_step_func,
+            train_step2(forward_step_func,
                        train_data_iterator,
                        model,
                        optimizer,
-                       lr_scheduler)
+                       lr_scheduler,
+                       iteration
+            )
         timers('train_step').stop()
         iteration += 1
         args.iteration = iteration
@@ -1259,8 +1305,9 @@ def evaluate(forward_step_func, data_iterator, model, verbose=False):
                 loss = model[0].eval_batch(data_iterator)
                 loss_dicts = [{'lm loss' : loss}] * get_num_microbatches()
             else:
-                loss_dicts = forward_backward_func(
+                loss_dicts = forward_backward_func2(
                     forward_step_func, data_iterator, model, optimizer=None,
+                    iteration=iteration,
                     timers=None, forward_only=True)
             
             if mpu.is_pipeline_last_stage(ignore_virtual=True):

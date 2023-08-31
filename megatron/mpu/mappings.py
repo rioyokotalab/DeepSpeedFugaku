@@ -14,11 +14,24 @@
 # limitations under the License.
 
 import torch
+import subprocess
 
 from .initialize import get_tensor_model_parallel_group, get_tensor_model_parallel_world_size, get_tensor_model_parallel_rank
 from .utils import split_tensor_along_last_dim
 from megatron import get_timers
+#from megatron import print_rank_last
 
+def is_last_rank():
+    return torch.distributed.get_rank() == (
+        torch.distributed.get_world_size() - 1)
+
+def print_rank_last(message):
+    """If distributed is initialized, print only on last rank."""
+    if torch.distributed.is_initialized():
+        if is_last_rank():
+            print(message, flush=True)
+    else:
+        print(message, flush=True)
 
 def _reduce(input_):
     """All-reduce the the input tensor across model parallel group."""
@@ -29,7 +42,8 @@ def _reduce(input_):
 
     # All-reduce.
     torch.distributed.all_reduce(input_, group=get_tensor_model_parallel_group())
-
+    if is_last_rank():
+        print('in _reduce, '+subprocess.run("cg=`grep memory /proc/self/cgroup`;cat /sys/fs/cgroup/memory/${cg#*memory:/}/memory.max_usage_in_bytes", shell=True, encoding='utf-8', stdout=subprocess.PIPE).stdout)
     return input_
 
 

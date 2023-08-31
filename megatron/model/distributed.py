@@ -21,6 +21,7 @@ from torch._utils import _flatten_dense_tensors, _unflatten_dense_tensors
 
 from megatron import get_args
 from megatron import mpu
+from megatron import print_rank_last
 from .module import MegatronModule
 
 
@@ -188,17 +189,24 @@ class DistributedDataParallel(DistributedDataParallelBase):
     def allreduce_gradients(self):
         """Reduce gradients across data parallel ranks."""
         # If we have buffers, simply reduce the data in the buffer.
+        print_rank_last('call allreduce_gradients')
         if self._grad_buffers is not None:
+            print_rank_last('call allreduce_gradients: _grad_buffers is not None')
             for _, buffer_ in self._grad_buffers.items():
                 buffer_.data /= mpu.get_data_parallel_world_size()
                 torch.distributed.all_reduce(
                     buffer_.data, group=mpu.get_data_parallel_group())
         else:
             # Otherwise, bucketize and all-reduce
+            print_rank_last('call allreduce_gradients: _grad_buffers is None')
             buckets = {}
             # Pack the buckets.
+            # self.module.parameters().grad = torch.zeros_like(self.module.parameters())
             for param in self.module.parameters():
+                # print_rank_last(f'call allreduce_gradients: {param.shape=}, {param.requires_grad=}, {param.grad=}')
+                param.grad = torch.zeros_like(param)
                 if param.requires_grad and param.grad is not None:
+                    # print_rank_last('call allreduce_gradients: param.requires_grad and param.grad is not None')
                     tp = param.data.type()
                     if tp not in buckets:
                         buckets[tp] = []
@@ -206,11 +214,13 @@ class DistributedDataParallel(DistributedDataParallelBase):
                     param.main_grad = param.grad
 
             # For each bucket, all-reduce and copy all-reduced grads.
+            print_rank_last(f'call allreduce_gradients: {len(buckets)=}')
             for tp in buckets:
                 bucket = buckets[tp]
                 grads = [param.grad.data for param in bucket]
                 coalesced = _flatten_dense_tensors(grads)
                 coalesced /= mpu.get_data_parallel_world_size()
+                print_rank_last(f'call {coalesced.shape=}')
                 torch.distributed.all_reduce(
                     coalesced, group=mpu.get_data_parallel_group())
                 for buf, synced in zip(grads, _unflatten_dense_tensors(
