@@ -149,12 +149,30 @@ def pretrain(train_valid_test_dataset_provider,
 
     memory_usage = get_model_memory(model[0])
     print_rank_last(f'{memory_usage=}')
-    total_memory_usage = 0
+    # total_memory_usage = 0
     for i in range(args.train_iters):
-        for model_module in model:
-            model_module.allreduce_gradients()
-            total_memory_usage += memory_usage
-        print_rank_last(f'{i=}, {total_memory_usage=}, {total_memory_usage/(2**30)=}')
+        buckets = {}
+        for param in model[0].parameters():
+            if param.grad is None:
+                param.grad = torch.zeros_like(param)
+            dt = param.data.type()
+            if buckets.get(dt) is None:
+                buckets[dt] = []
+            buckets[dt].append(param)
+            param.main_grad = param.grad
+        for tp in buckets:
+            coalesced = torch._utils._flatten_dense_tensors([param.grad.data for param in buckets[tp]])
+            # coalesced /= mpu.get_data_parallel_world_size()
+            torch.distributed.all_reduce(
+                coalesced,
+                group=mpu.get_data_parallel_group())
+        print_rank_last(f'{i=}, {coalesced.shape=}')
+        # del coalesced, buckets
+        
+        # for model_module in model:
+        #     model_module.allreduce_gradients()
+        #     total_memory_usage += memory_usage
+        # print_rank_last(f'{i=}, {total_memory_usage=}, {total_memory_usage/(2**30)=}')
     # # Data stuff.
     # timers('train/valid/test-data-iterators-setup').start()
     # if args.virtual_pipeline_model_parallel_size is not None:
