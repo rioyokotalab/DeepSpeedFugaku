@@ -152,8 +152,8 @@ def pretrain(train_valid_test_dataset_provider,
         buckets = {}
         for param in module.parameters():
             # print_rank_last(f'call allreduce_gradients: {param.shape=}, {param.requires_grad=}, {param.grad=}')
-            if param.grad is None:
-                param.grad = torch.zeros_like(param)
+            # if param.grad is None:
+            param.grad = torch.zeros_like(param)
             if param.requires_grad and param.grad is not None:
                 # print_rank_last('call allreduce_gradients: param.requires_grad and param.grad is not None')
                 tp = param.data.type()
