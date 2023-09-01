@@ -146,33 +146,67 @@ def pretrain(train_valid_test_dataset_provider,
         for param in model.parameters():
             total_memory += param.element_size() * param.nelement()
         return total_memory
+    
+    def allreduce_gradients(module):
+        print_rank_last('call allreduce_gradients: _grad_buffers is None')
+        buckets = {}
+        for param in module.parameters():
+            # print_rank_last(f'call allreduce_gradients: {param.shape=}, {param.requires_grad=}, {param.grad=}')
+            if param.grad is None:
+                param.grad = torch.zeros_like(param)
+            if param.requires_grad and param.grad is not None:
+                # print_rank_last('call allreduce_gradients: param.requires_grad and param.grad is not None')
+                tp = param.data.type()
+                if tp not in buckets:
+                    buckets[tp] = []
+                buckets[tp].append(param)
+                param.main_grad = param.grad
+
+        # For each bucket, all-reduce and copy all-reduced grads.
+        print_rank_last(f'call allreduce_gradients: {len(buckets)=}')
+        for tp in buckets:
+            bucket = buckets[tp]
+            grads = [param.grad.data for param in bucket]
+            coalesced = torch._utils._flatten_dense_tensors(grads)
+            coalesced /= mpu.get_data_parallel_world_size()
+            print_rank_last(f'call {coalesced.shape=}')
+            torch.distributed.all_reduce(
+                coalesced, group=mpu.get_data_parallel_group())
+            for buf, synced in zip(grads,torch._utils._unflatten_dense_tensors(
+                    coalesced, grads)):
+                buf.copy_(synced)
 
     memory_usage = get_model_memory(model[0])
     print_rank_last(f'{memory_usage=}')
     # total_memory_usage = 0
     for i in range(args.train_iters):
-        buckets = {}
-        for param in model[0].parameters():
-            if param.grad is None:
-                param.grad = torch.zeros_like(param)
-            dt = param.data.type()
-            if buckets.get(dt) is None:
-                buckets[dt] = []
-            buckets[dt].append(param)
-            param.main_grad = param.grad
-        for tp in buckets:
-            coalesced = torch._utils._flatten_dense_tensors([param.grad.data for param in buckets[tp]])
-            # coalesced /= mpu.get_data_parallel_world_size()
-            torch.distributed.all_reduce(
-                coalesced,
-                group=mpu.get_data_parallel_group())
-        print_rank_last(f'{i=}, {coalesced.shape=}')
+        # buckets = {}
+        # for param in model[0].parameters():
+        #     if param.grad is None:
+        #         param.grad = torch.zeros_like(param)
+        #     dt = param.data.type()
+        #     if buckets.get(dt) is None:
+        #         buckets[dt] = []
+        #     buckets[dt].append(param)
+        #     param.main_grad = param.grad
+        # for tp in buckets:
+        #     grads = [param.grad.data for param in buckets[tp]]
+        #     coalesced = torch._utils._flatten_dense_tensors(grads)
+        #     coalesced /= mpu.get_data_parallel_world_size()
+        #     torch.distributed.all_reduce(
+        #         coalesced,
+        #         group=mpu.get_data_parallel_group())
+        #     for buf, synced in zip(grads, torch._utils._unflatten_dense_tensors(
+        #             coalesced, grads)):
+        #         buf.copy_(synced)
+        # print_rank_last(f'{i=}, {coalesced.shape=}')
         # del coalesced, buckets
         
         # for model_module in model:
         #     model_module.allreduce_gradients()
         #     total_memory_usage += memory_usage
         # print_rank_last(f'{i=}, {total_memory_usage=}, {total_memory_usage/(2**30)=}')
+        allreduce_gradients(model[0])
     # # Data stuff.
     # timers('train/valid/test-data-iterators-setup').start()
     # if args.virtual_pipeline_model_parallel_size is not None:

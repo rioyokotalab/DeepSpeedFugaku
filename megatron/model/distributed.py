@@ -204,7 +204,8 @@ class DistributedDataParallel(DistributedDataParallelBase):
             # self.module.parameters().grad = torch.zeros_like(self.module.parameters())
             for param in self.module.parameters():
                 # print_rank_last(f'call allreduce_gradients: {param.shape=}, {param.requires_grad=}, {param.grad=}')
-                param.grad = torch.zeros_like(param)
+                if param.grad is None:
+                    param.grad = torch.zeros_like(param)
                 if param.requires_grad and param.grad is not None:
                     # print_rank_last('call allreduce_gradients: param.requires_grad and param.grad is not None')
                     tp = param.data.type()
@@ -223,6 +224,6 @@ class DistributedDataParallel(DistributedDataParallelBase):
                 print_rank_last(f'call {coalesced.shape=}')
                 torch.distributed.all_reduce(
                     coalesced, group=mpu.get_data_parallel_group())
-                for buf, synced in zip(grads, _unflatten_dense_tensors(
-                        coalesced, grads)):
-                    buf.copy_(synced)
+                # for buf, synced in zip(grads, _unflatten_dense_tensors(
+                #         coalesced, grads)):
+                #     buf.copy_(synced)
