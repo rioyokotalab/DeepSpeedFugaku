@@ -60,7 +60,7 @@ lr_warmup_tokens=$(echo "$lr_warmup_tokens/1" | bc)
 
 # same as megatron deepspeed setting
 lr_decay_tokens_in_billion=${train_token_in_billion}
-lr_decay_tokens=${train_tokens}
+lr_decay_tokens=${train_token}
 
 train_samples=$((300 * 1000000000 * 2 / ${sequence_length}))
 exit_duration=30000000
@@ -113,13 +113,11 @@ mpirun -np $WORLD_SIZE -npernode $GPUS_PER_NODE \
   --max-position-embeddings $sequence_length \
   --adam-beta1 0.9 \
   --adam-beta2 0.95 \
-  --init-method-std ${init_std} \
-  --lr-decay-tokens ${lr_decay_tokens} \
-  --lr-warmup-tokens ${lr_warmup_tokens} \
-  --train-tokens ${train_tokens} \
-  --train-samples ${train_samples} \
-  --lr-decay-tokens ${lr_decay_tokens} \
-  --lr-warmup-tokens ${lr_warmup_tokens} \
+  --init-method-std $init_std \
+  --lr-decay-tokens $lr_decay_tokens \
+  --lr-warmup-tokens $lr_warmup_tokens \
+  --train-tokens $train_token \
+  --train-samples $train_samples \
   --data-path $DATA_PATH \
   --tokenizer-type JapaneseSentencePiece \
   --vocab-file $vocab_path \

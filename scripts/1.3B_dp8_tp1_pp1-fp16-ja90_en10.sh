@@ -118,8 +118,6 @@ mpirun -np $WORLD_SIZE -npernode $GPUS_PER_NODE \
   --lr-warmup-tokens ${lr_warmup_tokens} \
   --train-tokens ${train_tokens} \
   --train-samples ${train_samples} \
-  --lr-decay-tokens ${lr_decay_tokens} \
-  --lr-warmup-tokens ${lr_warmup_tokens} \
   --data-path $DATA_PATH \
   --tokenizer-type JapaneseSentencePiece \
   --vocab-file $vocab_path \
