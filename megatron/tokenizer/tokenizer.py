@@ -318,11 +318,11 @@ class _JapaneseSentencePiece(AbstractTokenizer):
     def inv_vocab(self):
         raise NotImplementedError
 
-    def tokenize(self, text: str):
+    def tokenize(self, text: str) -> list[int]:
         # make sure this is user defined
         text = text.replace("\n", self.eol_symbol)
         text = text.replace("\r\n", self.eol_symbol)
-        return self.tokenizer.encode(text)
+        return self.tokenizer.encode(text)  # type: ignore
 
     def detokenize(self, token_ids):
         text = self.tokenizer.decode(token_ids)

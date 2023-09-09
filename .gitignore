@@ -3,6 +3,9 @@ outputs/*.out
 checkpoints/*
 datasets/*
 dataset/wikipedia/*
+wandb/*
+fugaku-v1-*.json
+tensorboard/*
 
 __pycache__
 

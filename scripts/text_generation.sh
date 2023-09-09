@@ -1,5 +1,5 @@
 #!/bin/bash
-#YBATCH -r a100_1
+#YBATCH -r rtx6000-ada_1
 #SBATCH --job-name=text-generation
 #SBATCH --ntasks=1
 #SBATCH --nodes=1
@@ -14,14 +14,17 @@ module load openmpi/4.0.5
 
 source .env/bin/activate
 
-CHECKPOINT_PATH=checkpoints/fugaku/350m_sentencepiece_v1
-VOCAB_FILE=tokenizer/models/cc100ja1GB_cc100en1GB/cc100_ja40K_en10K.symbolRemoved.vocab.reestimated.model
+JA_SIZE=10
+EN_SIZE=40
+
+CHECKPOINT_PATH=checkpoints/350m_dp4_v1_ja${JA_SIZE}K_en${EN_SIZE}K
+VOCAB_FILE=tokenizer/models/cc100ja1GB_cc100en1GB/cc100_ja${JA_SIZE}K_en${EN_SIZE}K.symbolRemoved.vocab.reestimated.model
 
 MAX_OUTPUT_SEQUENCE_LENGTH=1024
 TEMPERATURE=1.0
 TOP_P=0.9
 NUMBER_OF_SAMPLES=10
-OUTPUT_FILE="fugaku-sentencepiece-v1.json"
+OUTPUT_FILE="fugaku-v1-ja${JA_SIZE}K_en${EN_SIZE}K.json"
 INPUT_PREFIX=dataset
 
 python tools/generate_samples_gpt.py \
