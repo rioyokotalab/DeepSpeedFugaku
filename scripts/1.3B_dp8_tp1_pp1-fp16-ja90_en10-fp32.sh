@@ -1,5 +1,5 @@
 #!/bin/bash
-#YBATCH -r dgx-a100_8
+#YBATCH -r a100_8
 #SBATCH --job-name=gpt
 #SBATCH --ntasks=8
 #SBATCH --nodes=1
@@ -96,9 +96,7 @@ DATA_PARALLEL_ARGS="--DDP-impl local"
 PARALLEL_ARGS="$MODEL_PARALLEL_ARGS $DATA_PARALLEL_ARGS $PIPELINE_PARALLEL_ARGS"
 
 # checkpoint
-CHECKPOINT_PATH="/mnt/nfs/Users/kazuki/megatron-deepspeed/checkpoint/fugaku/1.3B-llm-jp-dataset-fp16-ja90_en10"
-
-mkdir -p $CHECKPOINT_PATH
+CHECKPOINT_PATH="/mnt/nfs/Users/kazuki/megatron-deepspeed/checkpoint/fugaku/1.3B-llm-jp-dataset-fp16-ja90_en10_fp32"
 
 mpirun -np $WORLD_SIZE -npernode $GPUS_PER_NODE \
   -x MASTER_ADDR=$MASTER_NODE \
@@ -109,7 +107,7 @@ mpirun -np $WORLD_SIZE -npernode $GPUS_PER_NODE \
   --num-layers 24 \
   --hidden-size 2048 \
   --num-attention-heads 16 \
-  --micro-batch-size 2 \
+  --micro-batch-size 4 \
   --global-batch-size 512 \
   --seq-length $sequence_length \
   --max-position-embeddings $sequence_length \
@@ -136,16 +134,15 @@ mpirun -np $WORLD_SIZE -npernode $GPUS_PER_NODE \
   --clip-grad 1.0 \
   --lr-warmup-fraction .01 \
   --log-interval 1 \
-  --save-interval 50 \
+  --save-interval 1000 \
   --eval-interval 100 \
   --eval-iters 10 \
   --checkpoint-activations \
   --use-cpu-initialization \
   --num-workers 0 \
-  --fp16 \
   --use-mpi \
   $PARALLEL_ARGS \
   $TENSORBOARD_ARGS \
   --log-batch-size-to-tensorboard \
   --log-validation-ppl-to-tensorboard \
-  --wandb-name "1.3B-GPU-ja90_en10-llm-jp-dataset-fp16"
+  --wandb-name "1.3B-GPU-ja90_en10-llm-jp-dataset-fp32"

@@ -96,7 +96,7 @@ DATA_PARALLEL_ARGS="--DDP-impl local"
 PARALLEL_ARGS="$MODEL_PARALLEL_ARGS $DATA_PARALLEL_ARGS $PIPELINE_PARALLEL_ARGS"
 
 # checkpoint
-CHECKPOINT_PATH="/mnt/nfs/Users/kazuki/megatron-deepspeed/checkpoint/fugaku/1.3B-llm-jp-dataset-fp16-ja90_en10"
+CHECKPOINT_PATH="/mnt/nfs/Users/kazuki/megatron-deepspeed/checkpoint/fugaku/1.3B-llm-jp-dataset-fp16-ja90_en10-deepspeed"
 
 mkdir -p $CHECKPOINT_PATH
 
@@ -146,6 +146,10 @@ mpirun -np $WORLD_SIZE -npernode $GPUS_PER_NODE \
   --use-mpi \
   $PARALLEL_ARGS \
   $TENSORBOARD_ARGS \
+  --deepspeed \
+  --deepspeed_config scripts/config-dgx.json \
+  --zero-stage 1 \
   --log-batch-size-to-tensorboard \
   --log-validation-ppl-to-tensorboard \
-  --wandb-name "1.3B-GPU-ja90_en10-llm-jp-dataset-fp16"
+  --log-optimizer-states-to-tensorboard \
+  --wandb-name "1.3B-GPU-ja90_en10-llm-jp-dataset-fp16-deepspeed"
