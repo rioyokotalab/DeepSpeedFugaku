@@ -140,6 +140,7 @@ def pretrain(train_valid_test_dataset_provider,
     timers('model-and-optimizer-setup').stop()
     print_datetime('after model, optimizer, and learning rate '
                    'scheduler are built')
+    print_rank_last(model)
     
     def get_model_memory(model: torch.nn.Module) -> int:
         total_memory = 0
