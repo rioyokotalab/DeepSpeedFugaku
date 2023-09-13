@@ -329,14 +329,14 @@ class TransformerLanguageModel(MegatronModule):
         self.num_experts = num_experts
 
         # Embeddings.
-        if self.pre_process:
-            self.embedding = Embedding(self.hidden_size,
-                                       args.padded_vocab_size,
-                                       args.max_position_embeddings,
-                                       args.hidden_dropout,
-                                       self.init_method,
-                                       self.num_tokentypes)
-            self._embedding_key = 'embedding'
+        # if self.pre_process:
+        #     self.embedding = Embedding(self.hidden_size,
+        #                                args.padded_vocab_size,
+        #                                args.max_position_embeddings,
+        #                                args.hidden_dropout,
+        #                                self.init_method,
+        #                                self.num_tokentypes)
+        #     self._embedding_key = 'embedding'
 
         # Transformer.
         self.encoder = ParallelTransformer(
