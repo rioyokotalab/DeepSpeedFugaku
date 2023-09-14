@@ -28,7 +28,7 @@ from megatron import mpu
 from megatron import print_rank_0
 from megatron import print_rank_last
 from megatron.model import Float16Module
-from megatron.initialize2 import initialize_megatron
+from megatron.initialize import initialize_megatron
 
 def print_datetime(string):
     """Note that this call will sync across all ranks."""
@@ -116,5 +116,5 @@ def pretrain(train_valid_test_dataset_provider,
             print_rank_last(f"{key}: {value}")
     print_rank_last('---global vars end---')
 
-    for i in range(300):
+    for i in range(100):
         allreduce_gradients(model[0])
