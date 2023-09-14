@@ -67,6 +67,22 @@ def print_datetime(string):
     time_str = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
     print_rank_0('[' + string + '] datetime: {} '.format(time_str))
 
+class MyModel(torch.nn.Module):
+    def __init__(self):
+        super(MyModel, self).__init__()
+        # layers = []
+        # # Input layer to first hidden layer
+        # layers.append(nn.Linear(1000, 5000))
+        # # Hidden layers
+        # for _ in range(10):
+        #     layers.append(nn.Linear(5000, 5000))
+        # # Output layer
+        # layers.append(nn.Linear(5000, 1))
+        # self.model = nn.Sequential(*layers)
+        self.weight = torch.nn.Parameter(torch.randn(1000, 1000))
+
+    def forward(self, x):
+        return self.model(x)
 
 def pretrain(train_valid_test_dataset_provider,
              model_provider,
@@ -115,7 +131,7 @@ def pretrain(train_valid_test_dataset_provider,
     print_datetime('after megatron is initialized')
 
     args = get_args()
-    timers = get_timers()
+    # timers = get_timers()
 
     if args.deepspeed:
         args.deepspeed_configuration = json.load(
@@ -133,14 +149,15 @@ def pretrain(train_valid_test_dataset_provider,
             args.compression_training = True
 
     # Model, optimizer, and learning rate.
-    timers('model-and-optimizer-setup').start()
-    model, optimizer, lr_scheduler = setup_model_and_optimizer(
-        model_provider, teacher=False, data_post_process=data_post_process,
-        build_train_valid_test_datasets_provider=train_valid_test_dataset_provider)
-    timers('model-and-optimizer-setup').stop()
+    # timers('model-and-optimizer-setup').start()
+    # model, optimizer, lr_scheduler = setup_model_and_optimizer(
+    #     model_provider, teacher=False, data_post_process=data_post_process,
+    #     build_train_valid_test_datasets_provider=train_valid_test_dataset_provider)
+    model = [MyModel()]
+    print_rank_last(model)
+    # timers('model-and-optimizer-setup').stop()
     print_datetime('after model, optimizer, and learning rate '
                    'scheduler are built')
-    print_rank_last(model)
     
     def get_model_memory(model: torch.nn.Module) -> int:
         total_memory = 0
