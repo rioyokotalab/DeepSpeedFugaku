@@ -1,5 +1,5 @@
 #! /bin/bash
-#PJM -L "rscunit=rscunit_ft01,rscgrp=pt-Aug"
+#PJM -L "rscunit=rscunit_ft01,rscgrp=small"
 #PJM -L elapse=0:10:00
 #PJM -L "node=2"
 #PJM --mpi "proc=2"
