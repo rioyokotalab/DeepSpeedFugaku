@@ -5,15 +5,6 @@ import os
 class MyModel(nn.Module):
     def __init__(self):
         super(MyModel, self).__init__()
-        # layers = []
-        # # Input layer to first hidden layer
-        # layers.append(nn.Linear(1000, 5000))
-        # # Hidden layers
-        # for _ in range(10):
-        #     layers.append(nn.Linear(5000, 5000))
-        # # Output layer
-        # layers.append(nn.Linear(5000, 1))
-        # self.model = nn.Sequential(*layers)
         self.weight = torch.nn.Parameter(torch.randn(1000, 1000))
 
     def forward(self, x):
@@ -31,6 +22,7 @@ def print_rank_last(message):
     else:
         print(message, flush=True)
 
+# distibuted init
 init_method = 'tcp://'
 master_ip = os.getenv('MASTER_ADDR', 'localhost')
 master_port = os.getenv('MASTER_PORT', '6000')
@@ -52,6 +44,7 @@ actual_params = sum(p.nelement() for p in model.parameters())
 print(actual_params)
 print(actual_params*4/1024/1024/1024)
 
+# allreduce and memory leak
 from torch.profiler import profile, ProfilerActivity
 with profile(activities=[ProfilerActivity.CPU], record_shapes=True) as prof:
     for i in range(300):
