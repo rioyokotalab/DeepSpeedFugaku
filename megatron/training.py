@@ -964,7 +964,7 @@ def training_log(loss_dict, total_loss_dict, learning_rate, iteration,
         wandb_stats["stats/tokens_per_sec_per_replica"] = tokens_per_sec_per_replica
 
         # only the last rank process has a non-None _GLOBAL_TENSORBOARD_WRITER
-        if wandb_writer and is_last_rank():
+        if writer and is_last_rank():
             if args.log_timers_to_tensorboard:
                 writer.add_scalar('iteration-time/iteration-time',
                                   elapsed_time_per_iteration, iteration)
