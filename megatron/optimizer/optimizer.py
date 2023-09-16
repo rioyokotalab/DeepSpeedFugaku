@@ -17,6 +17,7 @@
 
 from abc import ABC
 from abc import abstractmethod
+import typing
 
 import torch
 
@@ -63,9 +64,7 @@ def _multi_tensor_copy_this_to_that(this, that, overflow_buf=None):
             that_.copy_(this_)
 
 
-
 class MegatronOptimizer(ABC):
-
 
     def __init__(self, optimizer, clip_grad,
                  log_num_zeros_in_grad,
@@ -78,7 +77,6 @@ class MegatronOptimizer(ABC):
         self.log_num_zeros_in_grad = log_num_zeros_in_grad
         self.params_have_main_grad = params_have_main_grad
 
-
     def get_parameters(self):
         params = []
         for param_group in self.optimizer.param_groups:
@@ -86,37 +84,30 @@ class MegatronOptimizer(ABC):
                 params.append(param)
         return params
 
-
     def clip_grad_norm(self, clip_grad):
         params = self.get_parameters()
         return clip_grad_norm_fp32(params, clip_grad)
-
 
     def count_zeros(self):
         params = self.get_parameters()
         return count_zeros_fp32(params)
 
-
     @abstractmethod
     def zero_grad(self, set_to_none=True):
         pass
-
 
     @abstractmethod
     def get_loss_scale(self):
         """The output should be a cuda tensor of size 1."""
         pass
 
-
     def scale_loss(self, loss):
         """Simple scaling."""
         return self.get_loss_scale() * loss
 
-
     @abstractmethod
     def step(self):
         pass
-
 
     @abstractmethod
     def reload_model_params(self):
@@ -127,27 +118,23 @@ class MegatronOptimizer(ABC):
         with main parameters, the main parameters need to also be updated."""
         pass
 
-
     @abstractmethod
     def state_dict(self):
         pass
-
 
     @abstractmethod
     def load_state_dict(self, state_dict):
         pass
 
-
     # Promote state so it can be retrieved or set via
     # "optimizer_instance.state"
-    def _get_state(self):
+    def _get_state(self) -> dict[str, typing.Any]:
         return self.optimizer.state
 
-    def _set_state(self, value):
+    def _set_state(self, value) -> None:
         self.optimizer.state = value
 
     state = property(_get_state, _set_state)
-
 
     # Promote param_groups so it can be retrieved or set via
     # "optimizer_instance.param_groups"
@@ -159,7 +146,6 @@ class MegatronOptimizer(ABC):
         self.optimizer.param_groups = value
 
     param_groups = property(_get_param_groups, _set_param_groups)
-
 
 
 class Float16OptimizerWithFloat16Params(MegatronOptimizer):
@@ -227,62 +213,77 @@ class Float16OptimizerWithFloat16Params(MegatronOptimizer):
         #   float16_groups: original float16 parameters
         #   fp32_from_float16_groups: fp32 copy of float16 parameters
         #   fp32_from_fp32_groups: original fp32 parameters
-        self.float16_groups = []
-        self.fp32_from_float16_groups = []
-        self.fp32_from_fp32_groups = []
+        self.float16_groups: typing.List[typing.List[torch.Tensor]] = []
+        self.fp32_from_float16_groups: typing.List[typing.List[torch.Tensor]] = []
+        self.fp32_from_fp32_groups: typing.List[typing.List[torch.Tensor]] = []
+
+        class ParamGroupType(typing.TypedDict):
+            params: typing.List[torch.Tensor]
+            weight_decay: float
+            name: str
+            lr: float
+            bias_correction: bool
+            betas: typing.Tuple[float, float]
+            eps: float
 
         # For all the groups in the original optimizer:
         for param_group in self.optimizer.param_groups:
-            float16_params_this_group = []
-            fp32_params_this_group = []
-            fp32_from_float16_params_this_group = []
+            float16_params_this_group: typing.List[torch.Tensor] = []  # dtype: torch.float16
+            fp32_params_this_group: typing.List[torch.Tensor] = []  # dtype: torch.float32
+            fp32_from_float16_params_this_group: typing.List[torch.Tensor] = []
+
+            param_group: ParamGroupType = param_group
+
             # For all the parameters in this group:
+            # param: dtype: torch.float16
             for i, param in enumerate(param_group['params']):
+
                 if param.requires_grad:
 
                     # float16 params:
-
-
                     if param.type() in ['torch.{}.HalfTensor'.format(get_accelerator().device_name()),
                                         'torch.{}.BFloat16Tensor'.format(get_accelerator().device_name())]:
                         float16_params_this_group.append(param)
                         # Create a copy
-                        main_param = param.detach().clone().float()
+                        # detach() is needed to avoid a circular reference.
+                        # clone() is needed to avoid modifying the shared
+                        # float(): fp16, bfloat16, fp32 -> fp32
+                        main_param: torch.Tensor = param.detach().clone().float()  # dtype: torch.float32
+
                         # Copy tensor model parallel attributes.
-                        mpu.copy_tensor_model_parallel_attributes(main_param,
-                                                                  param)
+                        mpu.copy_tensor_model_parallel_attributes(main_param, param)
+
                         if hasattr(param, 'shared'):
                             main_param.shared = param.shared
+
                         # Replace the optimizer params with the new fp32 copy.
                         param_group['params'][i] = main_param
                         fp32_from_float16_params_this_group.append(main_param)
+
                         # Reset existing state dict key to the new main param.
                         if param in self.optimizer.state:
-                            self.optimizer.state[main_param] \
-                                = self.optimizer.state.pop(param)
+                            self.optimizer.state[main_param] = self.optimizer.state.pop(param)
 
                     # fp32 params.
-                    elif param.type() == 'torch.{}.FloatTensor'.format(format(get_accelerator().device_name())):
+                    elif param.type() == 'torch.{}.FloatTensor'.format(format(get_accelerator().device_name())):  # type: ignore
                         fp32_params_this_group.append(param)
                         param_group['params'][i] = param
 
                     else:
-                        device_name = get_accelerator().device_name()
+                        device_name = get_accelerator().device_name()  # type: ignore
                         raise TypeError('Wrapped parameters must be one of '
                                         'torch.{}.FloatTensor,  '
                                         'torch.{}.HalfTensor, or '
                                         'torch.{}.BFloat16Tensor. '
-                                        'Received {}'.format(device_name,device_name,device_name,param.type()))
+                                        'Received {}'.format(device_name, device_name, device_name, param.type()))
 
             self.float16_groups.append(float16_params_this_group)
-            self.fp32_from_float16_groups.append(
-                fp32_from_float16_params_this_group)
+            self.fp32_from_float16_groups.append(fp32_from_float16_params_this_group)
             self.fp32_from_fp32_groups.append(fp32_params_this_group)
 
         # Leverage state_dict() and load_state_dict() to
         # recast preexisting per-param state tensors
         self.optimizer.load_state_dict(self.optimizer.state_dict())
-
 
     def zero_grad(self, set_to_none=True):
         """We only need to zero the model related parameters, i.e.,
@@ -292,12 +293,10 @@ class Float16OptimizerWithFloat16Params(MegatronOptimizer):
         for group in self.fp32_from_fp32_groups:
             _zero_grad_group_helper(group, set_to_none)
 
-
     def get_loss_scale(self):
         if self.grad_scaler is None:
             return self._scale_one
         return self.grad_scaler.scale
-
 
     def _copy_model_grads_to_main_grads(self):
         # This only needs to be done for the float16 group.
@@ -314,7 +313,6 @@ class Float16OptimizerWithFloat16Params(MegatronOptimizer):
             for model_group in self.fp32_from_fp32_groups:
                 for model_param in model_group:
                     model_param.grad = model_param.main_grad
-
 
     def _unscale_main_grads_and_check_for_nan(self):
         main_grads = []
@@ -342,7 +340,6 @@ class Float16OptimizerWithFloat16Params(MegatronOptimizer):
         found_inf_flag = (self.found_inf.item() > 0)
         return found_inf_flag
 
-
     def _get_model_and_main_params_data_float16(self):
         model_data = []
         main_data = []
@@ -353,13 +350,11 @@ class Float16OptimizerWithFloat16Params(MegatronOptimizer):
                 main_data.append(main_param.data)
         return model_data, main_data
 
-
     def _copy_main_params_to_model_params(self):
         # Only needed for the float16 params.
         model_data, main_data = self._get_model_and_main_params_data_float16()
         _multi_tensor_copy_this_to_that(this=main_data, that=model_data,
                                         overflow_buf=self._dummy_overflow_buf)
-
 
     def _copy_model_params_to_main_params(self):
         # Only needed for the float16 params.
@@ -367,15 +362,14 @@ class Float16OptimizerWithFloat16Params(MegatronOptimizer):
         _multi_tensor_copy_this_to_that(this=model_data, that=main_data,
                                         overflow_buf=self._dummy_overflow_buf)
 
-
     def reload_model_params(self):
         self._copy_model_params_to_main_params()
 
-
     @torch.no_grad()
     def step(self):
+        from megatron.global_vars import Timers
 
-        timers = get_timers()
+        timers: Timers = get_timers()  # type: ignore
 
         # Copy gradients from model params to main params.
         timers('optimizer-copy-to-main-grad').start()
@@ -421,7 +415,6 @@ class Float16OptimizerWithFloat16Params(MegatronOptimizer):
         # Successful update.
         return True, grad_norm, num_zeros_in_grad
 
-
     def state_dict(self):
         state_dict = {}
         state_dict['optimizer'] = self.optimizer.state_dict()
@@ -429,7 +422,6 @@ class Float16OptimizerWithFloat16Params(MegatronOptimizer):
             state_dict['grad_scaler'] = self.grad_scaler.state_dict()
         state_dict['fp32_from_fp16_params'] = self.fp32_from_float16_groups
         return state_dict
-
 
     def load_state_dict(self, state_dict):
         # Optimizer.
@@ -463,7 +455,6 @@ class Float16OptimizerWithFloat16Params(MegatronOptimizer):
                 current_param.data.copy_(saved_param.data)
 
 
-
 class FP32Optimizer(MegatronOptimizer):
 
     def __init__(self, optimizer, clip_grad,
@@ -476,17 +467,14 @@ class FP32Optimizer(MegatronOptimizer):
 
         self._scale = get_accelerator().FloatTensor([1.0])
 
-
     def zero_grad(self, set_to_none=True):
         """Copied from torch.optim.optimizer"""
         for group in self.optimizer.param_groups:
             _zero_grad_group_helper(group['params'], set_to_none)
 
-
     def get_loss_scale(self):
         """FP32 optimizer does not do any scaling."""
         return self._scale
-
 
     @torch.no_grad()
     def step(self):
@@ -514,14 +502,11 @@ class FP32Optimizer(MegatronOptimizer):
         # No overflow for FP32 optimizer.
         return True, grad_norm, num_zeros_in_grad
 
-
     def reload_model_params(self):
         pass
 
-
     def state_dict(self):
         return self.optimizer.state_dict()
-
 
     def load_state_dict(self, state_dict):
         self.optimizer.load_state_dict(state_dict)
