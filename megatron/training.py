@@ -861,6 +861,8 @@ def training_log(loss_dict, total_loss_dict, learning_rate, iteration,
             opt_stats_2 = [0.0] * 4
             for _, group in enumerate(optimizer.param_groups):
                 for _, param in enumerate(group['params']):
+                    if not optimizer.state:
+                        continue
                     opt_stats[0] += (torch.norm(optimizer.state[param]['exp_avg_sq']).item())**2
                     opt_stats[1] += (torch.norm(optimizer.state[param]['exp_avg_sq'].sqrt()).item())**2
                     opt_stats[2] += (torch.norm(optimizer.state[param]['exp_avg']).item())**2
