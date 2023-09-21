@@ -96,7 +96,7 @@ DATA_PARALLEL_ARGS="--DDP-impl local"
 PARALLEL_ARGS="$MODEL_PARALLEL_ARGS $DATA_PARALLEL_ARGS $PIPELINE_PARALLEL_ARGS"
 
 # checkpoint
-CHECKPOINT_PATH="/mnt/nfs/Users/kazuki/megatron-deepspeed/checkpoint/fugaku/1.3B-llm-jp-dataset-fp16-ja10_en90"
+CHECKPOINT_PATH="/mnt/nfs/Users/kazuki/megatron-deepspeed/checkpoint/fugaku/1.3B-llm-jp-dataset-fp16-ja10_en90-fp16-cpu-optimizer"
 
 mpirun -np $WORLD_SIZE -npernode $GPUS_PER_NODE \
   -x MASTER_ADDR=$MASTER_NODE \
@@ -111,6 +111,8 @@ mpirun -np $WORLD_SIZE -npernode $GPUS_PER_NODE \
   --global-batch-size 512 \
   --seq-length $sequence_length \
   --max-position-embeddings $sequence_length \
+  --cpu-optimizer \
+  --cpu_torch_adam \
   --adam-beta1 0.9 \
   --adam-beta2 0.95 \
   --init-method-std $init_std \
@@ -146,4 +148,5 @@ mpirun -np $WORLD_SIZE -npernode $GPUS_PER_NODE \
   $TENSORBOARD_ARGS \
   --log-batch-size-to-tensorboard \
   --log-validation-ppl-to-tensorboard \
-  --wandb-name "1.3B-GPU-ja10_en90-llm-jp-dataset-fp16"
+  --log-optimizer-states-to-tensorboard \
+  --wandb-name "1.3B-GPU-ja10_en90-llm-jp-dataset-fp16-cpu-optimizer"
