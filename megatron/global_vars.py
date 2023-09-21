@@ -173,7 +173,7 @@ def _set_wandb_writer(args):
                 "entity": entity,
                 "name": exp_name,
                 "config": args,
-                "project": "megatron-deepspeed-loss-spike",
+                "project": "llm-jp-v1-dataset",
             }
             if args.wandb_id is not None:
                 wandb_input["id"] = args.wandb_id
