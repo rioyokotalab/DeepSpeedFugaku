@@ -1,6 +1,8 @@
 import torch
 import torch.nn as nn
 import os
+import subprocess
+import gc
 
 class MyModel(nn.Module):
     def __init__(self):
@@ -45,10 +47,12 @@ torch.distributed.init_process_group(
 # print(actual_params*4/1024/1024/1024)
 
 # allreduce and memory leak
-coalesced = torch.zeros(1000**2)
 from torch.profiler import profile, ProfilerActivity
 with profile(activities=[ProfilerActivity.CPU], record_shapes=True) as prof:
     for i in range(60):
-        # coalesced = torch.zeros(1000**2)
+        coalesced = torch.zeros(1000**2)
         torch.distributed.all_reduce(coalesced)
+        res = subprocess.run("echo call mpi by python cur: ;cg=`grep memory /proc/self/cgroup`;cat /sys/fs/cgroup/memory/${cg#*memory:/}/memory.usage_in_bytes", shell=True, capture_output=True)
+        print(res.stdout.decode())
         print_rank_last(f'{i=}, {coalesced.shape=}')
+        gc.collect()

@@ -24,5 +24,4 @@ output_path="jobs/torch.1.10/outs/${PJM_JOBID}_n${nodos}"
 MASTER_ADDR=$MASTER_ADDR \
 MASTER_PORT=$MASTER_PORT \
 mpiexec -n ${WORLD_SIZE} -std-proc ${output_path}/stdproc \
--x LD_PRELOAD="/vol0003/hp190122/data/users/u01959/my_mpi_allreduce/only_override.so" \
 python memory_leak2.py
