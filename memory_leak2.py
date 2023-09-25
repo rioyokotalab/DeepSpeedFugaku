@@ -37,37 +37,18 @@ torch.distributed.init_process_group(
     init_method=init_method)
 
 # Create the model
-model = MyModel()
+# model = MyModel()
 
-# Count the actual number of parameters
-actual_params = sum(p.nelement() for p in model.parameters())
-print(actual_params)
-print(actual_params*4/1024/1024/1024)
+# # Count the actual number of parameters
+# actual_params = sum(p.nelement() for p in model.parameters())
+# print(actual_params)
+# print(actual_params*4/1024/1024/1024)
 
 # allreduce and memory leak
+coalesced = torch.zeros(1000**2)
 from torch.profiler import profile, ProfilerActivity
 with profile(activities=[ProfilerActivity.CPU], record_shapes=True) as prof:
     for i in range(60):
-        # buckets = {}
-        # for param in model.parameters():
-        #     # if param.grad is None:
-        #     param.grad = torch.zeros_like(param)
-        #     dt = param.data.type()
-        #     if buckets.get(dt) is None:
-        #         buckets[dt] = []
-        #     buckets[dt].append(param)
-        #     param.main_grad = param.grad
-        # bucket = torch.zeros_like(next(model.parameters()))
-        for param in model.parameters():
-            param.grad = torch.zeros_like(param)
-        
-        #for tp in buckets:
-        grads = [param.grad.data for param in model.parameters()]
-        coalesced = torch._utils._flatten_dense_tensors(grads)
-        # print(coalesced)
-        # coalesced /= mpu.get_data_parallel_world_size()
+        # coalesced = torch.zeros(1000**2)
         torch.distributed.all_reduce(coalesced)
-        # for buf, synced in zip(grads, torch._utils._unflatten_dense_tensors(
-        #         coalesced, grads)):
-        #     buf.copy_(synced)
         print_rank_last(f'{i=}, {coalesced.shape=}')
