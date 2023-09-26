@@ -24,6 +24,7 @@ import json
 _TRAIN_START_TIME = time.time()
 
 import torch
+import torch.distributed as dist
 from torch.nn.parallel.distributed import DistributedDataParallel as torchDDP
 
 from megatron import get_args
@@ -621,6 +622,9 @@ def train_step(forward_step_func, data_iterator,
     # All-reduce if needed.
     timers('allreduce_params').start()
     if not args.deepspeed and args.DDP_impl == 'local':
+        timers('(DP)barrier').start()
+        dist.barrier(group=mpu.get_data_parallel_group())
+        timers('(DP)barrier').stop()
         timers('backward-params-all-reduce').start()
         for model_module in model:
             model_module.allreduce_gradients()
@@ -631,6 +635,9 @@ def train_step(forward_step_func, data_iterator,
     # that word_embeddings parameters stay in sync.
     # This should only run for models that support pipelined model parallelism
     # (BERT and GPT-2).
+    timers('(EMBEDDING)barrier').start()
+    dist.barrier(group=mpu.get_embedding_group())
+    timers('(EMBEDDING)barrier').stop()
     timers('backward-embedding-all-reduce').start()
     if not args.deepspeed:
         if (mpu.is_pipeline_first_stage(ignore_virtual=True) or
@@ -1053,6 +1060,10 @@ def training_log(loss_dict, total_loss_dict, learning_rate, iteration,
         add_to_out('batch-generator')
         add_to_out('save-checkpoint')
         add_to_out('allreduce_for_backward_tp')
+        add_to_out('(DP)barrier')
+        add_to_out('(TP)barrier')
+        add_to_out('(PP)barrier')
+        add_to_out('(EMBEDDING)barrier')
         timers.out(timers_to_out, normalizer=args.log_interval)
 
     return report_memory_flag

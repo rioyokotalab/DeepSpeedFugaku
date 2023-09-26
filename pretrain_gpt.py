@@ -16,6 +16,7 @@
 """Pretrain GPT"""
 
 import torch
+import torch.distributed as dist
 import math
 from functools import partial
 from megatron import get_args
@@ -203,6 +204,9 @@ def loss_func(loss_mask, moe_loss, mos_loss, output_tensor):
     loss = torch.sum(losses.view(-1) * loss_mask) / loss_mask.sum()
     
     # Reduce loss for logging.
+    timers('(DP)barrier').start()
+    dist.barrier(group=mpu.get_data_parallel_group())
+    timers('(DP)barrier').stop()
     timers('average_losses_across_data_parallel_group').start()
     averaged_loss = average_losses_across_data_parallel_group([loss])
     timers('average_losses_across_data_parallel_group').stop()
@@ -344,9 +348,6 @@ if __name__ == "__main__":
     torch.set_flush_denormal(True)
     os.makedirs(os.environ.get('TIMER', 'timer'), exist_ok=True)
     git_ds_info()
-    from torch.profiler import profile, ProfilerActivity
-    with profile(activities=[ProfilerActivity.CPU], record_shapes=True) as prof:
-        pretrain(train_valid_test_datasets_provider, model_provider, forward_step,
-                 args_defaults={'tokenizer_type': 'GPT2BPETokenizer'},
-                 data_post_process=data_post_process)
-    print(prof.key_averages().table(sort_by="cpu_time_total", row_limit=100))
+    pretrain(train_valid_test_datasets_provider, model_provider, forward_step,
+             args_defaults={'tokenizer_type': 'GPT2BPETokenizer'},
+             data_post_process=data_post_process)

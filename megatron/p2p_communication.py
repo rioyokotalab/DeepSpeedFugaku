@@ -16,6 +16,7 @@
 from functools import reduce
 import operator
 import torch
+import torch.distributed as dist
 
 from megatron import get_args
 from megatron import mpu
@@ -133,6 +134,9 @@ def recv_forward(timers=None):
         input_tensor = None
     else:
         if timers is not None:
+            timers('(PP)barrier').start()
+            dist.barrier(group=dist.new_group(ranks=[get_args().rank,mpu.get_pipeline_model_parallel_prev_rank()]))
+            timers('(PP)barrier').stop()
             timers('forward-recv').start()
         input_tensor, _ = _communicate(
             tensor_send_next=None,
@@ -150,6 +154,9 @@ def recv_backward(timers=None):
         output_tensor_grad = None
     else:
         if timers is not None:
+            timers('(PP)barrier').start()
+            dist.barrier(group=dist.new_group(ranks=[get_args().rank,mpu.get_pipeline_model_parallel_next_rank()]))
+            timers('(PP)barrier').stop()
             timers('backward-recv').start()
         _, output_tensor_grad = _communicate(
             tensor_send_next=None,
@@ -165,6 +172,9 @@ def send_forward(output_tensor, timers=None):
     """Send tensor to next rank in pipeline (forward send)."""
     if not mpu.is_pipeline_last_stage():
         if timers is not None:
+            timers('(PP)barrier').start()
+            dist.barrier(group=dist.new_group(ranks=[get_args().rank,mpu.get_pipeline_model_parallel_next_rank()]))
+            timers('(PP)barrier').stop()
             timers('forward-send').start()
         _communicate(
             tensor_send_next=output_tensor,
@@ -179,6 +189,9 @@ def send_backward(input_tensor_grad, timers=None):
     """Send tensor to previous rank in pipeline (backward send)."""
     if not mpu.is_pipeline_first_stage():
         if timers is not None:
+            timers('(PP)barrier').start()
+            dist.barrier(group=dist.new_group(ranks=[get_args().rank,mpu.get_pipeline_model_parallel_prev_rank()]))
+            timers('(PP)barrier').stop()
             timers('backward-send').start()
         _communicate(
             tensor_send_next=None,
@@ -195,6 +208,9 @@ def send_forward_recv_backward(output_tensor, timers=None):
         output_tensor_grad = None
     else:
         if timers is not None:
+            timers('(PP)barrier').start()
+            dist.barrier(group=dist.new_group(ranks=[get_args().rank,mpu.get_pipeline_model_parallel_next_rank()]))
+            timers('(PP)barrier').stop()
             timers('forward-send-backward-recv').start()
         _, output_tensor_grad = _communicate(
             tensor_send_next=output_tensor,
@@ -212,6 +228,9 @@ def send_backward_recv_forward(input_tensor_grad, timers=None):
         input_tensor = None
     else:
         if timers is not None:
+            timers('(PP)barrier').start()
+            dist.barrier(group=dist.new_group(ranks=[get_args().rank,mpu.get_pipeline_model_parallel_prev_rank()]))
+            timers('(PP)barrier').stop()
             timers('backward-send-forward-recv').start()
         input_tensor, _ = _communicate(
             tensor_send_next=None,

@@ -21,6 +21,7 @@
 import math
 
 import torch
+import torch.distributed as dist
 import torch.nn.functional as F
 import torch.nn.init as init
 from torch.nn.parameter import Parameter
@@ -37,6 +38,7 @@ from .utils import split_tensor_along_last_dim
 from .utils import VocabUtility
 from megatron import get_args
 from megatron import get_timers
+from megatron import mpu
 import deepspeed.runtime.activation_checkpointing.checkpointing as ds_checkpointing
 
 
@@ -410,6 +412,9 @@ class RowParallelLinear(torch.nn.Module):
         if self.is_expert_without_slicing: # non-expert only tensor-parallelism
             output_ = output_parallel
         else:
+            timers('(TP)barrier').start()
+            dist.barrier(group=mpu.get_tensor_model_parallel_group())
+            timers('(TP)barrier').stop()
             timers('row_par_lin_allreduce').start()
             output_ = reduce_from_tensor_model_parallel_region(output_parallel)
             timers('row_par_lin_allreduce').stop()
