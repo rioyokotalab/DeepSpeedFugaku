@@ -635,9 +635,9 @@ def train_step(forward_step_func, data_iterator,
     # that word_embeddings parameters stay in sync.
     # This should only run for models that support pipelined model parallelism
     # (BERT and GPT-2).
-    timers('(EMBEDDING)barrier').start()
-    dist.barrier(group=mpu.get_embedding_group())
-    timers('(EMBEDDING)barrier').stop()
+    # timers('(EMBEDDING)barrier').start()
+    # dist.barrier(group=mpu.get_embedding_group())
+    # timers('(EMBEDDING)barrier').stop()
     timers('backward-embedding-all-reduce').start()
     if not args.deepspeed:
         if (mpu.is_pipeline_first_stage(ignore_virtual=True) or
