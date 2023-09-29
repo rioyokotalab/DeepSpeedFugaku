@@ -204,9 +204,9 @@ def loss_func(loss_mask, moe_loss, mos_loss, output_tensor):
     loss = torch.sum(losses.view(-1) * loss_mask) / loss_mask.sum()
     
     # Reduce loss for logging.
-    timers('(DP)barrier').start()
+    timers('(DP)barrier(LOSS)').start()
     dist.barrier(group=mpu.get_data_parallel_group())
-    timers('(DP)barrier').stop()
+    timers('(DP)barrier(LOSS)').stop()
     timers('average_losses_across_data_parallel_group').start()
     averaged_loss = average_losses_across_data_parallel_group([loss])
     timers('average_losses_across_data_parallel_group').stop()

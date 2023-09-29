@@ -656,6 +656,9 @@ def train_step(forward_step_func, data_iterator,
                     grad = word_embeddings_weight.main_grad
                 else:
                     grad = word_embeddings_weight.grad
+                timers('(EMBEDDING)barrier').start()
+                dist.barrier(group=mpu.get_embedding_group())
+                timers('(EMBEDDING)barrier').stop()
                 torch.distributed.all_reduce(grad, group=mpu.get_embedding_group())
     timers('backward-embedding-all-reduce').stop()
 
@@ -1061,6 +1064,7 @@ def training_log(loss_dict, total_loss_dict, learning_rate, iteration,
         add_to_out('save-checkpoint')
         add_to_out('allreduce_for_backward_tp')
         add_to_out('(DP)barrier')
+        add_to_out('(DP)barrier(LOSS)')
         add_to_out('(TP)barrier')
         add_to_out('(PP)barrier')
         add_to_out('(EMBEDDING)barrier')
