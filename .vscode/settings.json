@@ -11,11 +11,12 @@
     "wandb/*": true
   },
   "cSpell.words": [
+    "coeff",
     "dataloaders",
-    "stdproc",
-    "TFLOPs",
     "Fugaku",
     "microbatches",
-    "Rampup"
+    "Rampup",
+    "stdproc",
+    "TFLOPs"
   ]
 }
