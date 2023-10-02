@@ -8,7 +8,9 @@
     "**/.mypy_cache": true,
     "pytorch/*": true,
     "DeepSpeed/*": true,
-    "wandb/*": true
+    "wandb/*": true,
+    "**/pytorch/*": true,
+    "**/DeepSpeed/*": true,
   },
   "cSpell.words": [
     "dataloaders",

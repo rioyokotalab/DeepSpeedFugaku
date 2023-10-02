@@ -93,7 +93,8 @@ def parse_args(extra_args_provider=None, defaults={},
 
         args.rank = int(os.getenv('RANK', '0'))
     else:
-    args.rank = get_rank()
+        args.rank = get_rank()
+
     args.world_size = int(os.getenv("WORLD_SIZE", '1'))
     # Tensor model parallel size.
     args.tensor_model_parallel_size = min(
@@ -531,6 +532,7 @@ def _add_training_args(parser: argparse.ArgumentParser) -> argparse.ArgumentPars
                        help='Use Tutel optimization for MoE')
     group.add_argument('--inference', action='store_true',
                        help='Very basic inference mode: not allocating optim/lr - requires ZERO_STAGE=0')
+    group.add_argument("--use-mpi", action="store_true")
 
     return parser
 
