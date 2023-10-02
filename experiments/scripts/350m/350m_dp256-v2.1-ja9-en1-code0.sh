@@ -2,8 +2,8 @@
 #PJM -L "rscunit=rscunit_ft01,rscgrp=ppu2023"
 #PJM --rsc-list "proc-openfd=65536"
 #PJM -L elapse=24:00:00
-#PJM -L "node=1024"
-#PJM --mpi "proc=1024"
+#PJM -L "node=256"
+#PJM --mpi "proc=256"
 #PJM --mpi "max-proc-per-node=1"
 #PJM -g hp230254
 #PJM -x PJM_LLIO_GFSCACHE=/vol0003:/vol0004
@@ -52,12 +52,12 @@ lr_decay_tokens=${train_token}
 
 # Change for multinode config
 CPUS_PER_NODE=1
-NNODES=1024
+NNODES=256
 NODE_RANK=0
 export WORLD_SIZE=$(($CPUS_PER_NODE * $NNODES))
 export MASTER_ADDR=localhost
 export MASTER_PORT=$((10000 + ($PJM_JOBID % 50000)))
-CHECKPOINT_PATH=/data/hp190122/share/fujii/checkpoints/llm-jp-v1/1.3b_tp4_dp256_v2.1_code${CODE_VOCAB_SIZE}k_en${EN_VOCAB_SIZE}k_ja${JA_VOCAB_SIZE}k/ja${JA_PERTCENT}_en${EN_PERTCENT}_code${CODE_PERTCENT}_9_21
+CHECKPOINT_PATH=/data/hp190122/share/fujii/checkpoints/llm-jp-v1/350m_tp1_dp256_v2.1_code${CODE_VOCAB_SIZE}k_en${EN_VOCAB_SIZE}k_ja${JA_VOCAB_SIZE}k/ja${JA_PERTCENT}_en${EN_PERTCENT}_code${CODE_PERTCENT}
 VOCAB_FILE=tokenizer/models/ver2/code${CODE_VOCAB_SIZE}k_en${EN_VOCAB_SIZE}k_ja${JA_VOCAB_SIZE}k.ver2.1.model
 
 mkdir -p $CHECKPOINT_PATH
@@ -90,7 +90,7 @@ DISTRIBUTED_ARGS="-np $NNODES -std-proc ${output_path}/stdproc"
 
 DATA_PARALLEL_SIZE=256
 PIPELINE_MODEL_PARALLEL_SIZE=1
-TENSOR_MODEL_PARALLEL_SIZE=4
+TENSOR_MODEL_PARALLEL_SIZE=1
 
 PIPELINE_PARALLEL_ARGS="--pipeline-model-parallel-size $PIPELINE_MODEL_PARALLEL_SIZE"
 MODEL_PARALLEL_ARGS="--tensor-model-parallel-size $TENSOR_MODEL_PARALLEL_SIZE"
@@ -108,10 +108,10 @@ train_samples=$(( 300 * 1000000000 * 2 / ${seq_len} ))
 mpirun $DISTRIBUTED_ARGS \
   python pretrain_gpt.py \
   --num-layers 24 \
-  --hidden-size 2048 \
+  --hidden-size 1024 \
   --num-attention-heads 16 \
-  --micro-batch-size 2 \
-  --global-batch-size 512 \
+  --micro-batch-size 1 \
+  --global-batch-size 256 \
   --seq-length $seq_len \
   --max-position-embeddings $seq_len \
   --train-tokens $train_token \
@@ -126,8 +126,8 @@ mpirun $DISTRIBUTED_ARGS \
   --data-impl mmap \
   --split 949,50,1 \
   --distributed-backend mpi \
-  --init-method-std 0.013 \
-  --lr 2.0e-4 \
+  --init-method-std 0.018 \
+  --lr 3.0e-4 \
   --min-lr 1.0e-6 \
   --lr-decay-style cosine \
   --weight-decay 0.1 \
@@ -138,7 +138,7 @@ mpirun $DISTRIBUTED_ARGS \
   --clip-grad 1.0 \
   --lr-warmup-fraction .01 \
   --log-interval 1 \
-  --save-interval 100 \
+  --save-interval 1000 \
   --eval-interval 100 \
   --eval-iters 10 \
   --no-cuda \
@@ -152,4 +152,4 @@ mpirun $DISTRIBUTED_ARGS \
   --log-validation-ppl-to-tensorboard \
   --log-timers-to-tensorboard \
   --log-optimizer-states-to-tensorboard \
-  --wandb-name "1.3b_gb512-ja${JA_PERTCENT}_en${EN_PERTCENT}_code${CODE_PERTCENT}"
+  --wandb-name "350_gb256-ja${JA_PERTCENT}_en${EN_PERTCENT}_code${CODE_PERTCENT}"
