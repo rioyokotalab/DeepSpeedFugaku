@@ -127,10 +127,8 @@ export LD_PRELOAD=/local/fcc/inst/other/lib/libtcmalloc.so
 #  echo "# MYGEMM=" $MYGEMM
 #fi
 
-#    --num-layers 48 \
-#    --hidden-size 6912 \
-#    --num-attention-heads 72 \
-#    --micro-batch-size 1 \
+# ref. https://www.fugaku.r-ccs.riken.jp/faq/20210428_01 , https://www.fugaku.r-ccs.riken.jp/bug/20210428_02
+export UTOFU_SWAP_PROTECT=1
 
 numactl -m 4-7 -N 4-7 python pretrain_gpt.py \
     --num-layers 24 \
