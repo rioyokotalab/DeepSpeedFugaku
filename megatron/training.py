@@ -1134,12 +1134,12 @@ def train(forward_step_func, model, optimizer, lr_scheduler,
         timers('train_step').start()
         from torch.profiler import profile, ProfilerActivity
         with profile(activities=[ProfilerActivity.CPU]) as prof:
-        loss_dict, skipped_iter, grad_norm, num_zeros_in_grad = \
-            train_step(forward_step_func,
-                       train_data_iterator,
-                       model,
-                       optimizer,
-                       lr_scheduler)
+            loss_dict, skipped_iter, grad_norm, num_zeros_in_grad = \
+                train_step(forward_step_func,
+                        train_data_iterator,
+                        model,
+                        optimizer,
+                        lr_scheduler)
         timers('train_step').stop()
         timers('iteration').stop()
         print(prof.key_averages().table(sort_by='cpu_time_total', row_limit=100))
