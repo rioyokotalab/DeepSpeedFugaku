@@ -21,14 +21,15 @@ import os
 import torch
 import deepspeed
 
-def get_rank():
+
+def get_rank() -> int:
     rank = None
     rank_environment_variables = [
-        'RANK', # defalut
-        'OMPI_COMM_WORLD_RANK', # OpenMPI
-        'PMIX_RANK', # Fugaku
-        'PMI_RANK' # IntelMPI, mpich2
-        'MV2_COMM_WORLD_RANK' # mvapich2
+        'RANK',  # default
+        'OMPI_COMM_WORLD_RANK',  # OpenMPI
+        'PMIX_RANK',  # Fugaku
+        'PMI_RANK',  # IntelMPI, mpich2
+        'MV2_COMM_WORLD_RANK'  # mvapich2
     ]
     for environment_variable in rank_environment_variables:
         rank = os.environ.get(environment_variable)
@@ -37,8 +38,9 @@ def get_rank():
     print('WARNING: rank is not set in the environment variable.')
     return 0
 
+
 def parse_args(extra_args_provider=None, defaults={},
-               ignore_unknown_args=False):
+               ignore_unknown_args=False) -> argparse.Namespace:
     """Parse all arguments."""
     parser = argparse.ArgumentParser(description='Megatron-LM Arguments',
                                      allow_abbrev=False)
@@ -62,6 +64,7 @@ def parse_args(extra_args_provider=None, defaults={},
     parser = _add_memoryopt_args(parser)
     parser = _add_activation_checkpoint_args(parser)
     parser = _add_distillation_args(parser)
+    parser = _add_gpt_fugaku_args(parser=parser)
 
     # Custom arguments.
     if extra_args_provider is not None:
@@ -73,13 +76,25 @@ def parse_args(extra_args_provider=None, defaults={},
     if ignore_unknown_args:
         args, _ = parser.parse_known_args()
     else:
-        args = parser.parse_args()
+        args: argparse.Namespace = parser.parse_args()
 
     # helper argument to set deepspeed pipeline parallel or not
     args.ds_pipeline_enabled = not args.no_pipeline_parallel
 
     # Distributed args.
-    args.rank = get_rank()
+    if args.use_mpi:
+        global_rank = int(os.getenv('OMPI_COMM_WORLD_RANK', 0))
+        local_rank = int(os.getenv('OMPI_COMM_WORLD_LOCAL_RANK', 0))
+        world_size = int(os.getenv('OMPI_COMM_WORLD_SIZE', 1))
+
+        os.environ['RANK'] = str(global_rank)
+        os.environ['LOCAL_RANK'] = str(local_rank)
+        os.environ['WORLD_SIZE'] = str(world_size)
+
+        args.rank = int(os.getenv('RANK', '0'))
+    else:
+        args.rank = get_rank()
+
     args.world_size = int(os.getenv("WORLD_SIZE", '1'))
     # Tensor model parallel size.
     args.tensor_model_parallel_size = min(
@@ -113,13 +128,13 @@ def parse_args(extra_args_provider=None, defaults={},
     # Deprecated arguments
     assert args.batch_size is None, '--batch-size argument is no longer ' \
         'valid, use --micro-batch-size instead'
-    del args.batch_size
+    del args.batch_size  # type: ignore
     assert args.warmup is None, '--warmup argument is no longer valid, use ' \
         '--lr-warmup-fraction instead'
-    del args.warmup
+    del args.warmup  # type: ignore
     assert args.model_parallel_size is None, '--model-parallel-size is no ' \
         'longer valid, use --tensor-model-parallel-size instead'
-    del args.model_parallel_size
+    del args.model_parallel_size  # type: ignore
 
     # Set input defaults.
     for key in defaults:
@@ -267,7 +282,7 @@ def parse_args(extra_args_provider=None, defaults={},
     args.curriculum_learning_legacy = False
     args.compression_training = False
 
-    # AML
+    # AML (Azure Machine Learning)
     if args.aml_data_download_path is not None:
         data_paths = []
         for path in args.data_path:
@@ -278,7 +293,7 @@ def parse_args(extra_args_provider=None, defaults={},
     return args
 
 
-def _print_args(args):
+def _print_args(args: argparse.Namespace) -> None:
     """Print arguments."""
     if args.rank == 0:
         print('------------------------ arguments ------------------------',
@@ -297,7 +312,7 @@ def _check_arg_is_not_none(args, arg):
     assert getattr(args, arg) is not None, '{} argument is None'.format(arg)
 
 
-def _add_network_size_args(parser):
+def _add_network_size_args(parser: argparse.ArgumentParser) -> argparse.ArgumentParser:
     group = parser.add_argument_group(title='network size')
 
     group.add_argument('--num-layers', type=int, default=None,
@@ -348,7 +363,7 @@ def _add_network_size_args(parser):
     return parser
 
 
-def _add_logging_args(parser):
+def _add_logging_args(parser: argparse.ArgumentParser) -> argparse.ArgumentParser:
     group = parser.add_argument_group(title='logging')
 
     group.add_argument('--log-params-norm', action='store_true',
@@ -385,7 +400,7 @@ def _add_logging_args(parser):
     return parser
 
 
-def _add_regularization_args(parser):
+def _add_regularization_args(parser: argparse.ArgumentParser) -> argparse.ArgumentParser:
     group = parser.add_argument_group(title='regularization')
 
     group.add_argument('--attention-dropout', type=float, default=0.1,
@@ -411,7 +426,7 @@ def _add_regularization_args(parser):
     return parser
 
 
-def _add_training_args(parser):
+def _add_training_args(parser: argparse.ArgumentParser) -> argparse.ArgumentParser:
     group = parser.add_argument_group(title='training')
 
     group.add_argument('--micro-batch-size', type=int, default=None,
@@ -462,7 +477,7 @@ def _add_training_args(parser):
                        'training runs.')
     group.add_argument('--random-ltd',
                        action='store_true',
-                       help='enable random layer token drop')    
+                       help='enable random layer token drop')
     group.add_argument('--log-interval', type=int, default=100,
                        help='Report loss and timing interval.')
     group.add_argument('--exit-interval', type=int, default=None,
@@ -472,6 +487,8 @@ def _add_training_args(parser):
                        help='Exit the program after this many minutes.')
     group.add_argument('--tensorboard-dir', type=str, default=None,
                        help='Write TensorBoard logs to this directory.')
+    group.add_argument('--wandb-name', type=str, default=None)
+    group.add_argument('--wandb-id', type=str, default=None)
     group.add_argument('--no-masked-softmax-fusion',
                        action='store_false',
                        help='Disable fusion of query_key_value scaling, '
@@ -507,7 +524,7 @@ def _add_training_args(parser):
                        help='DeepSpeed inference engine being used')
     group.add_argument('--cpu-optimizer', action='store_true',
                        help='Run optimizer on CPU')
-    group.add_argument('--cpu_torch_adam', action='store_true',
+    group.add_argument('--cpu-torch-adam', action='store_true',
                        help='Use Torch Adam as optimizer on CPU.')
     group.add_argument('--no-pipeline-parallel', action='store_true',
                        help='Disable pipeline parallelism')
@@ -515,11 +532,12 @@ def _add_training_args(parser):
                        help='Use Tutel optimization for MoE')
     group.add_argument('--inference', action='store_true',
                        help='Very basic inference mode: not allocating optim/lr - requires ZERO_STAGE=0')
+    group.add_argument("--use-mpi", action="store_true")
 
     return parser
 
 
-def _add_initialization_args(parser):
+def _add_initialization_args(parser: argparse.ArgumentParser) -> argparse.ArgumentParser:
     group = parser.add_argument_group(title='initialization')
 
     group.add_argument('--seed', type=int, default=1234,
@@ -534,7 +552,7 @@ def _add_initialization_args(parser):
     return parser
 
 
-def _add_learning_rate_args(parser):
+def _add_learning_rate_args(parser: argparse.ArgumentParser) -> argparse.ArgumentParser:
     group = parser.add_argument_group(title='learning rate')
 
     group.add_argument('--lr', type=float, default=None,
@@ -586,7 +604,7 @@ def _add_learning_rate_args(parser):
     return parser
 
 
-def _add_checkpointing_args(parser):
+def _add_checkpointing_args(parser: argparse.ArgumentParser) -> argparse.ArgumentParser:
     group = parser.add_argument_group(title='checkpointing')
 
     group.add_argument('--save', type=str, default=None,
@@ -604,7 +622,7 @@ def _add_checkpointing_args(parser):
     group.add_argument('--no-load-rng', action='store_true', default=None,
                        help='Do not load rng state when loading checkpoint.')
     group.add_argument('--no-load-lr-state', action='store_true',
-                       help='Do not load lr state when loading checkpoint.')   
+                       help='Do not load lr state when loading checkpoint.')
     group.add_argument('--finetune', action='store_true',
                        help='Load model for finetuning. Do not load optimizer '
                        'or rng state from checkpoint and set iteration to 0. '
@@ -613,7 +631,7 @@ def _add_checkpointing_args(parser):
     return parser
 
 
-def _add_mixed_precision_args(parser):
+def _add_mixed_precision_args(parser: argparse.ArgumentParser) -> argparse.ArgumentParser:
     group = parser.add_argument_group(title='mixed precision')
 
     group.add_argument('--fp16', action='store_true',
@@ -651,7 +669,7 @@ def _add_mixed_precision_args(parser):
     return parser
 
 
-def _add_distributed_args(parser):
+def _add_distributed_args(parser: argparse.ArgumentParser) -> argparse.ArgumentParser:
     group = parser.add_argument_group(title='distributed')
 
     group.add_argument('--tensor-model-parallel-size', type=int, default=1,
@@ -698,7 +716,7 @@ def _add_distributed_args(parser):
     return parser
 
 
-def _add_validation_args(parser):
+def _add_validation_args(parser: argparse.ArgumentParser) -> argparse.ArgumentParser:
     group = parser.add_argument_group(title='validation')
 
     group.add_argument('--eval-iters', type=int, default=100,
@@ -711,7 +729,7 @@ def _add_validation_args(parser):
     return parser
 
 
-def _add_data_args(parser):
+def _add_data_args(parser: argparse.ArgumentParser) -> argparse.ArgumentParser:
     group = parser.add_argument_group(title='data and dataloader')
 
     group.add_argument('--aml-data-download-path', type=str, default=None,
@@ -758,7 +776,8 @@ def _add_data_args(parser):
                        default=None,
                        choices=['BertWordPieceLowerCase',
                                 'BertWordPieceCase',
-                                'GPT2BPETokenizer'],
+                                'GPT2BPETokenizer',
+                                'JapaneseSentencePiece'],
                        help='What type of tokenizer to use.')
     group.add_argument('--data-impl', type=str, default='infer',
                        choices=['lazy', 'cached', 'mmap', 'infer'],
@@ -788,7 +807,7 @@ def _add_data_args(parser):
     return parser
 
 
-def _add_autoresume_args(parser):
+def _add_autoresume_args(parser: argparse.ArgumentParser) -> argparse.ArgumentParser:
     group = parser.add_argument_group(title='autoresume')
 
     group.add_argument('--adlr-autoresume', action='store_true',
@@ -800,7 +819,7 @@ def _add_autoresume_args(parser):
     return parser
 
 
-def _add_biencoder_args(parser):
+def _add_biencoder_args(parser: argparse.ArgumentParser) -> argparse.ArgumentParser:
     group = parser.add_argument_group(title='biencoder')
 
     # network size
@@ -857,7 +876,7 @@ def _add_biencoder_args(parser):
     return parser
 
 
-def _add_vit_args(parser):
+def _add_vit_args(parser: argparse.ArgumentParser) -> argparse.ArgumentParser:
     group = parser.add_argument_group(title="vit")
 
     group.add_argument('--num-classes', type=int, default=1000,
@@ -872,7 +891,7 @@ def _add_vit_args(parser):
     return parser
 
 
-def _add_zero_args(parser):
+def _add_zero_args(parser: argparse.ArgumentParser) -> argparse.ArgumentParser:
     """Text generate arguments."""
 
     group = parser.add_argument_group('ZeRO configurations', 'configurations')
@@ -889,7 +908,7 @@ def _add_zero_args(parser):
                      help='Use pinned CPU memory for ZeRO-3 initialized model parameters.')
     return parser
 
-def _add_memoryopt_args(parser):
+def _add_memoryopt_args(parser: argparse.ArgumentParser) -> argparse.ArgumentParser:
     """Memory optimization arguments."""
 
     group = parser.add_argument_group('Memory optimizations', 'configurations')
@@ -910,7 +929,7 @@ def _add_memoryopt_args(parser):
 
     return parser
 
-def _add_activation_checkpoint_args(parser):
+def _add_activation_checkpoint_args(parser: argparse.ArgumentParser) -> argparse.ArgumentParser:
     group = parser.add_argument_group('Activation Checkpointing',
                                       'Checkpointing Configurations')
     group.add_argument('--deepspeed-activation-checkpointing', action='store_true',
@@ -928,7 +947,7 @@ def _add_activation_checkpoint_args(parser):
     return parser
 
 
-def _add_distillation_args(parser):
+def _add_distillation_args(parser: argparse.ArgumentParser) -> argparse.ArgumentParser:
     group = parser.add_argument_group('Knowledge distillation',
                                       'Distillation Configurations')
     
@@ -954,4 +973,14 @@ def _add_distillation_args(parser):
     group.add_argument('--load-teacher', type=str, default=None,
                        help='Directory containing a teacher model checkpoint.')
 
+    return parser
+
+
+def _add_gpt_fugaku_args(parser: argparse.ArgumentParser) -> argparse.ArgumentParser:
+    group = parser.add_argument_group("GPT-Fugaku Project arguments")
+    # for profiling timer
+    group.add_argument("--use-timer", action="store_true",
+                       help="If set, profiling start and write profiling result to `timer/job-name/`")
+    group.add_argument("--use-flush-denormal", action="store_true",
+                       help="If set, torch.set_flush_denornmal(mode=True)")
     return parser
