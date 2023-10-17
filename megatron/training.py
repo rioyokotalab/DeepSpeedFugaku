@@ -688,6 +688,10 @@ def train_step(forward_step_func, data_iterator, model, optimizer, lr_scheduler)
         timers('allreduce_params').start()
     # timer start
     if not args.deepspeed and args.DDP_impl == "local":
+        if args.use_timer:
+            timers('(DP)barrier').start()
+            dist.barrier(group=mpu.get_data_parallel_group())
+            timers('(DP)barrier').stop()
         # default timers
         timers("backward-params-all-reduce").start()
 
@@ -1317,11 +1321,18 @@ def train(
             )
         if args.use_timer:
             timers('train_step').start()
-        loss_dict, skipped_iter, grad_norm, num_zeros_in_grad = train_step(
-            forward_step_func, train_data_iterator, model, optimizer, lr_scheduler
-        )
+        from torch.profiler import profile, ProfilerActivity
+        with profile(activities=[ProfilerActivity.CPU]) as prof:
+            loss_dict, skipped_iter, grad_norm, num_zeros_in_grad = train_step(
+                forward_step_func, train_data_iterator, model, optimizer, lr_scheduler
+            )
         if args.use_timer:
             timers('train_step').stop()
+            timers('iteration').stop()
+        print(prof.key_averages().table(sort_by='cpu_time_total', row_limit=100))
+        if args.use_timer:
+            timers('iteration').start()
+        del prof
         iteration += 1
         args.iteration = iteration
         new_samples = (

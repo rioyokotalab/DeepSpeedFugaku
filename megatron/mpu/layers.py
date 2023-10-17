@@ -415,6 +415,9 @@ class RowParallelLinear(torch.nn.Module):
             output_ = output_parallel
         else:
             if args.use_timer:
+                timers('(TP)barrier').start()
+                dist.barrier(group=mpu.get_tensor_model_parallel_group())
+                timers('(TP)barrier').stop()
                 timers('row_par_lin_allreduce').start()
             output_ = reduce_from_tensor_model_parallel_region(output_parallel)
             if args.use_timer:

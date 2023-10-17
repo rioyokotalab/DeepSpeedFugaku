@@ -239,6 +239,9 @@ def loss_func(loss_mask, moe_loss, mos_loss, output_tensor):
 
     # Reduce loss for logging.
     if args.use_timer:
+        timers('(DP)barrier(LOSS)').start()
+        dist.barrier(group=mpu.get_data_parallel_group())
+        timers('(DP)barrier(LOSS)').stop()
         timers('average_losses_across_data_parallel_group').start()
     # timer start
     averaged_loss = average_losses_across_data_parallel_group([loss])

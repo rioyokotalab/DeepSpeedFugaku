@@ -53,6 +53,28 @@ TIMER_PROFILE_TARGET_NAMES: list[str] = [
     "backward_step",
     "backward-compute",
     "allreduce_params",
+    "forward-recv",
+    "forward-send",
+    "forward-backward-send-forward-backward-recv",
+    "backward-recv",
+    "backward-send",
+    "backward-send-forward-recv",
+    "backward-send-backward-recv",
+    "backward-params-all-reduce",
+    "backward-embedding-all-reduce",
+    "optimizer-copy-to-main-grad",
+    "optimizer-unscale-and-check-inf",
+    "optimizer-clip-main-grad",
+    "optimizer-copy-main-to-model-params",
+    "optimizer",
+    "batch-generator",
+    "save-checkpoint",
+    "allreduce_for_backward_tp",
+    "(DP)barrier",
+    "(DP)barrier(LOSS)",
+    "(TP)barrier",
+    "(PP)barrier",
+    "(EMBEDDING)barrier"
 ]
 
 
