@@ -171,7 +171,9 @@ numactl -m 4-7 -N 4-7 python pretrain_gpt.py \
     --num-workers 0 \
     --no-load-rng \
     $PARALLEL_ARGS \
-  --wandb-name "1.3B-pp${PIPELINE_MODEL_PARALLEL_SIZE}-tp${TENSOR_MODEL_PARALLEL_SIZE}-dp${DATA_PARALLEL_SIZE}-gb${GLOBAL_BATCH}-GEMM${MYGEMM}-ja${JA_PERTCENT}_en${EN_PERTCENT}_code${CODE_PERTCENT}"
+  --wandb-name "1.3B-pp${PIPELINE_MODEL_PARALLEL_SIZE}-tp${TENSOR_MODEL_PARALLEL_SIZE}-dp${DATA_PARALLEL_SIZE}-gb${GLOBAL_BATCH}-GEMM${MYGEMM}-ja${JA_PERTCENT}_en${EN_PERTCENT}_code${CODE_PERTCENT}" \
+  --use-timer \
+  --use-flush-denormal
 
   #--log-batch-size-to-tensorboard \
   #--log-validation-ppl-to-tensorboard \
