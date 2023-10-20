@@ -8,7 +8,8 @@
 #PJM -L "ex_pipe_state=0"
 #PJM -L "eco_state=0"
 #PJM -L "retention_state=0"
-#PJM --llio localtmp-size=80Gi
+#PJM --llio localtmp-size=70Gi
+#PJM --llio sharedtmp-size=10Gi
 #PJM --mpi "proc=1"
 #PJM --mpi "max-proc-per-node=1"
 #PJM -g hp230254
@@ -23,7 +24,14 @@ num_node=12288
 
 rm /home/u11890/work/rankmap/vcoordfile_${hostfile_name}
 
+llio_transfer /home/u11890/work/rankmap/fjmpi_6d_to_3d.out
+
 mpirun -n ${num_node} /home/u11890/work/rankmap/fjmpi_6d_to_3d.out /home/u11890/work/rankmap/hostfile_${hostfile_name} /home/u11890/work/rankmap/vcoordfile_${hostfile_name}
+
+llio_transfer --purge /home/u11890/work/rankmap/fjmpi_6d_to_3d.out
+
+llio_transfer ${inner_file_name}
+llio_transfer /home/u11890/work/1693389241.318550480.fcc.pytorch.y.r1.13_for_a64fx.tar
 
 mpirun -n ${num_node} \
 	--vcoordfile /home/u11890/work/rankmap/vcoordfile_${hostfile_name} \
