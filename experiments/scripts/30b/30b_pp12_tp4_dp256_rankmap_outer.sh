@@ -18,7 +18,7 @@
 #PJM -S
 
 hostfile_name='4x16x16x2x3x2_tp4dp256pp12'
-stdproc_name='jobs/30b_pp12_tp4_dp256_pytorch1.13/outs/${PJM_JOBID}_n/stdproc'
+stdproc_name="jobs/30b_pp12_tp4_dp256_pytorch1.13/outs/${PJM_JOBID}_n/stdproc"
 inner_file_name='30b_pp12_tp4_dp256_rankmap_inner.sh'
 num_node=12288
 
