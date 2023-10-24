@@ -17,10 +17,14 @@
 #PJM -j
 #PJM -S
 
-hostfile_name='4x16x16x2x3x2_tp4dp256pp12'
-stdproc_name="jobs/30b_pp12_tp4_dp256_pytorch1.13/outs/${PJM_JOBID}_n/stdproc"
-inner_file_name='30b_pp12_tp4_dp256_rankmap_inner.sh'
+pp=12
+tp=4
+dp=256
+gbs=1536
 num_node=12288
+hostfile_name="4x16x16x2x3x2_tp${tp}dp${dp}pp${pp}"
+param_name="30b_pp${pp}_tp${tp}_dp${dp}_pytorch1.13_rankmap_gbs${gbs}"
+stdproc_name="jobs/${param_name}/outs/${PJM_JOBID}_n/stdproc"
 
 rm /home/u11890/work/rankmap/vcoordfile_${hostfile_name}
 
@@ -30,10 +34,11 @@ mpirun -n ${num_node} /home/u11890/work/rankmap/fjmpi_6d_to_3d.out /home/u11890/
 
 llio_transfer --purge /home/u11890/work/rankmap/fjmpi_6d_to_3d.out
 
-llio_transfer ${inner_file_name}
+llio_transfer inner.sh
 llio_transfer /home/u11890/work/1693389241.318550480.fcc.pytorch.y.r1.13_for_a64fx.tar
 
 mpirun -n ${num_node} \
 	--vcoordfile /home/u11890/work/rankmap/vcoordfile_${hostfile_name} \
 	-std-proc ${stdproc_name} \
-	bash ${inner_file_name}
+	bash inner.sh ${param_name} ${num_node} ${pp} ${tp} ${dp} ${gbs}
+

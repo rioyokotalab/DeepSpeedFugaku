@@ -1,7 +1,7 @@
 #!/bin/bash
 #PJM -L "rscunit=rscunit_ft01,rscgrp=ppu2023"
 #PJM -L elapse=10:00:00
-#PJM -L "node=8x48x32:torus:strict-io"
+#PJM -L "node=8x6x4:torus:strict-io"
 #PJM -L "freq=2200"
 #PJM -L "throttling_state=0"
 #PJM -L "issue_state=0"
@@ -17,12 +17,12 @@
 #PJM -j
 #PJM -S
 
-pp=8
-tp=6
-dp=256
-gbs=1536
-num_node=12288
-hostfile_name="4x16x16x2x3x2_tp${tp}dp${dp}pp${pp}"
+pp=6
+tp=8
+dp=4
+gbs=24
+num_node=192
+hostfile_name="4x2x2x2x3x2_tp${tp}dp${dp}pp${pp}"
 param_name="30b_pp${pp}_tp${tp}_dp${dp}_pytorch1.13_rankmap_gbs${gbs}"
 stdproc_name="jobs/${param_name}/outs/${PJM_JOBID}_n/stdproc"
 

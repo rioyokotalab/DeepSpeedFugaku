@@ -17,8 +17,8 @@
 #PJM -j
 #PJM -S
 
-pp=8
-tp=6
+pp=24
+tp=2
 dp=256
 gbs=1536
 num_node=12288
