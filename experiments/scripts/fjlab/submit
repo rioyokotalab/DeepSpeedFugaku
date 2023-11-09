@@ -1,0 +1,45 @@
+#!/bin/bash
+#
+# MODEL : LLM model size
+# TRAINDATA : training data
+# WANDBHEAD : prefix of WandB log
+#
+# SDIR : script-dir of submit/run.sh/job.sh
+# DEEPSPEEDFUGAKU : my-DeepSpeedFugaku path
+# PYTORCH_TGZ : ENV file of custom pytorch.tgz
+#
+# Degree of parallelism, etc., specified in run.sh
+
+MODEL="30b"  # 125m, 1.3b, 13b or 30b
+TRAINDATA="codeparrot"  # codeparrot or wiki
+WANDBHEAD="hptune"  # "nouse" if wandb isn't used
+TRAIN_ITERS=5
+
+SDIR=`readlink -f "$0" | xargs dirname`
+RUNFILE="run.sh"
+JOBFILE="job.sh"
+
+DEEPSPEEDFUGAKU=${HOME}/work/DeepSpeedFugaku
+PYTORCH_PATH=/vol0005/mdt3/share/hp230254/pytorch
+PYTORCH_FILE=1697799253.292378221.fcc.pytorch.y.r1.13_for_a64fx.tar.gz # m-ymzk 10/21 w/ tensorboard
+PYTORCH_TGZ=${PYTORCH_PATH}/${PYTORCH_FILE}
+
+Time=`date "+%y%m%d%H%M%S"`
+JobName="$Time.$$"
+RUNDIR=${SDIR}/log_hptune_${MODEL}/${JobName}
+mkdir -p $RUNDIR
+cd $RUNDIR
+cp ${SDIR}/${RUNFILE} .
+cp ${SDIR}/${JOBFILE} .
+
+sed -i '15i TRAIN_ITERS='$TRAIN_ITERS ${RUNFILE}
+sed -i '15i LOGDIR='logfile/stdproc ${RUNFILE}
+sed -i '15i WANDBHEAD='${WANDBHEAD} ${RUNFILE}
+sed -i '15i TRAINDATA='${TRAINDATA} ${RUNFILE}
+sed -i '15i MODEL='${MODEL} ${RUNFILE}
+sed -i '15i JOBSCRIPT='${JOBFILE} ${RUNFILE}
+sed -i '15i PYTORCH_TGZ='${PYTORCH_TGZ} ${RUNFILE}
+sed -i '15i DEEPSPEEDFUGAKU='${DEEPSPEEDFUGAKU} ${RUNFILE}
+
+pjsub $RUNFILE
+
