@@ -17,9 +17,9 @@ import argparse
 import os
 import random
 import numpy
-import torch
+from megatron import torch
 
-import mpu
+from megatron import mpu
 from deepspeed.accelerator import get_accelerator
 
 class IdentityLayer(torch.nn.Module):
@@ -56,10 +56,13 @@ def initialize_distributed(backend='nccl'):
           'rank: {}, world size: {}'.format(local_rank, rank, world_size))
 
     # Set the device id.
-    device = rank % get_accelerator().device_count()
-    if local_rank is not None:
-        device = local_rank
-    get_accelerator().set_device(device)
+    if get_accelerator().device_count() > 0:
+        device = rank % get_accelerator().device_count()
+        if local_rank is not None:
+            device = local_rank
+        get_accelerator().set_device(device)
+    else: # CPUs
+        backend='mpi'
 
     # Call the init process.
     init_method = 'tcp://'
