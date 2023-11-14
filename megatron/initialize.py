@@ -181,7 +181,10 @@ def setup_deepspeed_random_and_activation_checkpointing(args):
     mpu.checkpoint = deepspeed.checkpointing.checkpoint
     mpu.get_cuda_rng_tracker = deepspeed.checkpointing.get_cuda_rng_tracker
     mpu.get_cpus_rng_tracker = deepspeed.checkpointing.get_cpus_rng_tracker
-    mpu.model_parallel_cuda_manual_seed = deepspeed.checkpointing.model_parallel_cuda_manual_seed
+    if get_accelerator().device_count() > 0:
+        mpu.model_parallel_cuda_manual_seed = deepspeed.checkpointing.model_parallel_cuda_manual_seed
+    else:
+        mpu.model_parallel_cpus_manual_seed = deepspeed.checkpointing.model_parallel_cpus_manual_seed
 
 
 def _initialize_distributed():
