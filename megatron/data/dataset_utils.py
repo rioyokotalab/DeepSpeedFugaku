@@ -711,7 +711,8 @@ def get_samples_mapping(indexed_dataset,
     # This should be a barrier but nccl barrier assumes
     # device_index=rank which is not the case for model
     # parallel case
-    if get_accelerator().device_count() > 0: # Skip when CPU-only
+    # if get_accelerator().device_count() > 0: # Skip when CPU-only
+    if True:
         counts = get_accelerator().LongTensor([1])
         torch.distributed.all_reduce(counts, group=mpu.get_data_parallel_group())
         torch.distributed.all_reduce(counts, group=mpu.get_pipeline_model_parallel_group())

@@ -17,24 +17,36 @@ from commons import set_random_seed
 from commons import IdentityLayer
 from commons import print_separator
 from commons import initialize_distributed
-from mpu.cross_entropy import vocab_parallel_cross_entropy
-import mpu
+from megatron import mpu
+from megatron.mpu.cross_entropy import vocab_parallel_cross_entropy
 import torch.nn.functional as F
 import torch
 import random
 import sys
 from deepspeed.accelerator import get_accelerator
 sys.path.append("../..")
+num_devices = get_accelerator().device_count()
 
 
 def torch_cross_entropy(batch_size, seq_length, vocab_size,
                         logits_scale, seed):
+    global num_devices
     set_random_seed(seed)
-    identity = IdentityLayer((batch_size, seq_length, vocab_size),
-                             scale=logits_scale).to(get_accelerator().device_name())
+    if num_devices > 0:
+        identity = IdentityLayer((batch_size, seq_length, vocab_size),
+                                 scale=logits_scale).to(get_accelerator().device_name())
+    else:
+        identity = IdentityLayer((batch_size, seq_length, vocab_size),
+                                 scale=logits_scale)
+
     logits = identity()
-    target = get_accelerator().LongTensor(
-        size=(batch_size, seq_length)).random_(0, vocab_size)
+    if num_devices > 0:
+        target = get_accelerator().LongTensor(
+            size=(batch_size, seq_length)).random_(0, vocab_size)
+    else:
+        target = torch.LongTensor(
+            size=(batch_size, seq_length)).random_(0, vocab_size)
+
     loss = F.cross_entropy(logits.view(-1, logits.size()[-1]),
                            target.view(-1),
                            reduction='none').view_as(target).mean()
@@ -44,13 +56,25 @@ def torch_cross_entropy(batch_size, seq_length, vocab_size,
 
 def mpu_cross_entropy(batch_size, seq_length, vocab_size,
                       logits_scale, seed):
+    global num_devices
     set_random_seed(seed)
-    identity = IdentityLayer((batch_size, seq_length, vocab_size),
-                             scale=logits_scale).to(get_accelerator().device_name())
+    if num_devices > 0:
+        identity = IdentityLayer((batch_size, seq_length, vocab_size),
+                                 scale=logits_scale).to(get_accelerator().device_name())
+    else:
+        identity = IdentityLayer((batch_size, seq_length, vocab_size),
+                                 scale=logits_scale)
+
     logits = identity()
-    logits_parallel = mpu.scatter_to_tensor_model_parallel_region(logits)
-    target = get_accelerator().LongTensor(
-        size=(batch_size, seq_length)).random_(0, vocab_size)
+    if num_devices > 0:
+        logits_parallel = mpu.scatter_to_tensor_model_parallel_region(logits)
+        target = get_accelerator().LongTensor(
+            size=(batch_size, seq_length)).random_(0, vocab_size)
+    else:
+        logits_parallel = mpu.scatter_to_tensor_model_parallel_region(logits).clone()
+        target = torch.LongTensor(
+            size=(batch_size, seq_length)).random_(0, vocab_size)
+
     loss = vocab_parallel_cross_entropy(logits_parallel, target).mean()
     loss.backward()
     return loss, identity.weight.grad
@@ -90,7 +114,7 @@ def test_cross_entropy(tensor_model_parallel_size):
     assert error < 1.0e-6
 
     # Reset groups
-    mpu.destroy_tensor_model_parallel()
+    mpu.destroy_model_parallel()
 
     torch.distributed.barrier()
     if torch.distributed.get_rank() == 0:

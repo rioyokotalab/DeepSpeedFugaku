@@ -36,7 +36,10 @@ def set_random_seed(seed):
     random.seed(seed)
     numpy.random.seed(seed)
     torch.manual_seed(seed)
-    mpu.model_parallel_cuda_manual_seed(seed)
+    if get_accelerator().device_count() > 0:
+        mpu.model_parallel_cuda_manual_seed(seed)
+    else:
+        mpu.model_parallel_cpus_manual_seed(seed)
 
 
 def initialize_distributed(backend='nccl'):
