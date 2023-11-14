@@ -16,8 +16,8 @@
 from commons import print_separator
 from commons import initialize_distributed
 from deepspeed.accelerator import get_accelerator
-from mpu import data as data_utils
-import mpu
+from megatron import mpu
+from megatron.mpu import data as data_utils
 import torch
 import functools
 import operator
@@ -70,7 +70,7 @@ def test_broadcast_data(tensor_model_parallel_size):
         assert data_b[key].sub(tensor).abs().max() == 0
 
     # Reset groups
-    mpu.destroy_tensor_model_parallel()
+    mpu.destroy_model_parallel()
 
     torch.distributed.barrier()
     if torch.distributed.get_rank() == 0:
