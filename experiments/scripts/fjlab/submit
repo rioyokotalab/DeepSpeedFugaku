@@ -10,7 +10,7 @@
 #
 # Degree of parallelism, etc., specified in run.sh
 
-MODEL="30b"  # 125m, 1.3b, 13b or 30b
+MODEL="30b"  # 125m, 1.3b, 13b, 30b or 175b
 TRAINDATA="codeparrot"  # codeparrot or wiki
 WANDBHEAD="hptune"  # "nouse" if wandb isn't used
 TRAIN_ITERS=5
@@ -26,14 +26,14 @@ PYTORCH_TGZ=${PYTORCH_PATH}/${PYTORCH_FILE}
 
 Time=`date "+%y%m%d%H%M%S"`
 JobName="$Time.$$"
-RUNDIR=${SDIR}/log_hptune_${MODEL}/${JobName}
+RUNDIR=${SDIR}/log_${WANDBHEAD}_${MODEL}/${JobName}
 mkdir -p $RUNDIR
 cd $RUNDIR
 cp ${SDIR}/${RUNFILE} .
 cp ${SDIR}/${JOBFILE} .
 
 sed -i '15i TRAIN_ITERS='$TRAIN_ITERS ${RUNFILE}
-sed -i '15i LOGDIR='logfile/stdproc ${RUNFILE}
+sed -i '15i LOGDIR='output.%j/%m/%/1000r/stdproc ${RUNFILE}
 sed -i '15i WANDBHEAD='${WANDBHEAD} ${RUNFILE}
 sed -i '15i TRAINDATA='${TRAINDATA} ${RUNFILE}
 sed -i '15i MODEL='${MODEL} ${RUNFILE}

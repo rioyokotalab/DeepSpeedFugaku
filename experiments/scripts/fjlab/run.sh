@@ -1,7 +1,7 @@
 #!/bin/bash
 #PJM -L "rscunit=rscunit_ft01,rscgrp=ppu2023"
 #PJM -L elapse=1:00:00
-#PJM -L "node=4x3x4:torus:strict-io"
+#PJM -L "node=24x12x32:torus:strict-io"
 #PJM -L "freq=2200"
 #PJM --llio localtmp-size=70Gi
 #PJM --llio sharedtmp-size=10Gi
@@ -21,10 +21,10 @@
 #LOGDIR=log/stdout
 #TRAIN_ITERS=0
 
-PP=4  # pipeline-parallel
-TP=3  # tensor-parallel
-DP=4 # data-parallel
-GB=48 # global-batch
+PP=24  # pipeline-parallel
+TP=24  # tensor-parallel
+DP=16 # data-parallel
+GB=1536 # global-batch
 MB=1  # micro-batch
 MYGEMM=99 # 1: original, 99: fj-BMM-v1
 GEMM_DEBUG=0 # 1: output shapes to calculate by fj-BMM

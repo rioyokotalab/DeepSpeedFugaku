@@ -46,6 +46,16 @@ case ${MODELSIZE} in
     HIDDEN_SIZE=6912
     NUM_ATTENTION_HEADS=96
     ;;
+  "175a")
+    NUM_LAYERS=3
+    HIDDEN_SIZE=12288
+    NUM_ATTENTION_HEADS=96
+    ;;
+  "175b")
+    NUM_LAYERS=96
+    HIDDEN_SIZE=12288
+    NUM_ATTENTION_HEADS=96
+    ;;
   *)
     echo "${MODELSIZE} is not supported"
     exit;;
