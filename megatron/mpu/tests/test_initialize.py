@@ -15,7 +15,7 @@
 
 from commons import print_separator
 from commons import initialize_distributed
-import mpu
+from megatron import mpu
 import torch
 import sys
 sys.path.append("../..")
