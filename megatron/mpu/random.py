@@ -138,6 +138,7 @@ class CudaRNGStatesTracker:
 
     def __init__(self):
         print('CudaRNGStatesTracker.__init__')
+        torch.set_printoptions(edgeitems=1000)
         # Map from a string name to the cuda rng state.
         self.states_ = {}
         # Seeds are just for book keeping and ensure no seed is set twice.
@@ -217,6 +218,7 @@ class CpusRNGStatesTracker:
 
     def __init__(self):
         print('CpusRNGStatesTracker.__init__')
+        torch.set_printoptions(edgeitems=1000)
         # Map from a string name to the cuda rng state.
         self.states_ = {}
         # Seeds are just for book keeping and ensure no seed is set twice.
@@ -245,8 +247,8 @@ class CpusRNGStatesTracker:
 
     def add(self, name, seed):
         """Track the rng state."""
-        # Check seed is not already used.
         print('CpusRNGStatesTracker.add:{},{}'.format(name, seed))
+        # Check seed is not already used.
         if seed in self.seeds_:
             raise Exception('seed {} already exists'.format(seed))
         self.seeds_.add(seed)
@@ -269,7 +271,7 @@ class CpusRNGStatesTracker:
         # Check if we have added the state
         if name not in self.states_:
             print(name, self.states_)
-            raise Exception('cuda rng state {} is not added'.format(name))
+            raise Exception('cpus rng state {} is not added'.format(name))
         # Store current rng state.
         orig_cpus_rng_state = torch.get_rng_state()
         print(' set_rng_state:{}'.format(self.states_[name]))
