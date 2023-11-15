@@ -164,6 +164,7 @@ def setup_deepspeed_random_and_activation_checkpointing(args):
     we overwrite them to maintain consistency.
     This must be called before all the calls to mpu.model_parallel_cuda_manual_seed
     '''
+    print('setup_deepspeed_random_and_activation_checkpointing')
     num_layers = args.num_layers // args.checkpoint_num_layers
     num_layers = num_layers if args.num_layers % args.checkpoint_num_layers == 0 else num_layers + 1
     if args.split_transformers:
@@ -182,8 +183,10 @@ def setup_deepspeed_random_and_activation_checkpointing(args):
     mpu.get_cuda_rng_tracker = deepspeed.checkpointing.get_cuda_rng_tracker
     mpu.get_cpus_rng_tracker = deepspeed.checkpointing.get_cpus_rng_tracker
     if get_accelerator().device_count() > 0:
+        print('setup_deepspeed_random_and_activation_checkpointing:CUDA')
         mpu.model_parallel_cuda_manual_seed = deepspeed.checkpointing.model_parallel_cuda_manual_seed
     else:
+        print('setup_deepspeed_random_and_activation_checkpointing:CPUS')
         mpu.model_parallel_cpus_manual_seed = deepspeed.checkpointing.model_parallel_cpus_manual_seed
 
 
@@ -250,6 +253,7 @@ def _init_autoresume():
 
 def _set_random_seed(seed_):
     """Set random seed for reproducability."""
+    print('_set_random_seed')
     if seed_ is not None and seed_ > 0:
         # Ensure that different pipeline MP stages get different seeds.
         seed = seed_ + (100 * mpu.get_pipeline_model_parallel_rank())
@@ -257,8 +261,10 @@ def _set_random_seed(seed_):
         np.random.seed(seed)
         torch.manual_seed(seed)
         if get_accelerator().device_count() > 0:
+            print('_set_random_seed:CUDA')
             mpu.model_parallel_cuda_manual_seed(seed)
         else:
+            print('_set_random_seed:CPUS')
             mpu.model_parallel_cpus_manual_seed(seed)
     else:
         raise ValueError('Seed ({}) should be a positive integer.'.format(seed))

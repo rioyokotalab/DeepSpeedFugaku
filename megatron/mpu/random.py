@@ -137,6 +137,7 @@ class CudaRNGStatesTracker:
     """
 
     def __init__(self):
+        print('CudaRNGStatesTracker.__init__')
         # Map from a string name to the cuda rng state.
         self.states_ = {}
         # Seeds are just for book keeping and ensure no seed is set twice.
@@ -144,6 +145,7 @@ class CudaRNGStatesTracker:
 
     def reset(self):
         """Set to the initial state (no tracker)."""
+        print('CudaRNGStatesTracker.reset')
         self.states_ = {}
         self.seeds_ = set()
 
@@ -153,15 +155,18 @@ class CudaRNGStatesTracker:
         states = {}
         for name in self.states_:
             states[name] = self.states_[name]
+        print('CudaRNGStatesTracker.get_states:{}'.format(states))
         return states
 
     def set_states(self, states):
         """Set the rng states. For efficiency purposes, we do not check
         the size of seed for compatibility."""
+        print('CudaRNGStatesTracker.set_states:{}'.format(states))
         self.states_ = states
 
     def add(self, name, seed):
         """Track the rng state."""
+        print('CudaRNGStatesTracker.add:{},{}'.format(name).format(seed))
         # Check seed is not already used.
         if seed in self.seeds_:
             raise Exception('seed {} already exists'.format(seed))
@@ -181,12 +186,14 @@ class CudaRNGStatesTracker:
     def fork(self, name=_MODEL_PARALLEL_RNG_TRACKER_NAME):
         """Fork the cuda rng state, perform operations, and exit with
         the original state."""
+        print('CudaRNGStatesTracker.fork:{}'.format(name))
         # Check if we have added the state
         if name not in self.states_:
             print(name, self.states_)
             raise Exception('cuda rng state {} is not added'.format(name))
         # Store current rng state.
         orig_cuda_rng_state = get_accelerator().get_rng_state()
+        print(' set_rng_state:{}'.format(self.states_[name]))
         # Set rng state to the desired one
         _set_cuda_rng_state(self.states_[name])
         # Do the stuff we wanted to do.
@@ -196,6 +203,7 @@ class CudaRNGStatesTracker:
             # Update the current rng state for later use.
             self.states_[name] = get_accelerator().get_rng_state()
             # And set the state to the original state we started with.
+            print(' restore rng_state:{}'.format(orig_cuda_rng_state))
             _set_cuda_rng_state(orig_cuda_rng_state)
 
 class CpusRNGStatesTracker:
@@ -208,6 +216,7 @@ class CpusRNGStatesTracker:
     """
 
     def __init__(self):
+        print('CpusRNGStatesTracker.__init__')
         # Map from a string name to the cuda rng state.
         self.states_ = {}
         # Seeds are just for book keeping and ensure no seed is set twice.
@@ -215,6 +224,7 @@ class CpusRNGStatesTracker:
 
     def reset(self):
         """Set to the initial state (no tracker)."""
+        print('CpusRNGStatesTracker.reset')
         self.states_ = {}
         self.seeds_ = set()
 
@@ -224,16 +234,19 @@ class CpusRNGStatesTracker:
         states = {}
         for name in self.states_:
             states[name] = self.states_[name]
+        print('CpusRNGStatesTracker.get_states:{}'.format(states))
         return states
 
     def set_states(self, states):
         """Set the rng states. For efficiency purposes, we do not check
         the size of seed for compatibility."""
+        print('CpusRNGStatesTracker.set_states:{}'.format(states))
         self.states_ = states
 
     def add(self, name, seed):
         """Track the rng state."""
         # Check seed is not already used.
+        print('CpusRNGStatesTracker.add:{},{}'.format(name, seed))
         if seed in self.seeds_:
             raise Exception('seed {} already exists'.format(seed))
         self.seeds_.add(seed)
@@ -252,12 +265,14 @@ class CpusRNGStatesTracker:
     def fork(self, name=_MODEL_PARALLEL_RNG_TRACKER_NAME):
         """Fork the cpus rng state, perform operations, and exit with
         the original state."""
+        print('CpusRNGStatesTracker.fork:{}'.format(name))
         # Check if we have added the state
         if name not in self.states_:
             print(name, self.states_)
             raise Exception('cuda rng state {} is not added'.format(name))
         # Store current rng state.
-        orig_cuda_rng_state = torch.get_rng_state()
+        orig_cpus_rng_state = torch.get_rng_state()
+        print(' set_rng_state:{}'.format(self.states_[name]))
         # Set rng state to the desired one
         torch.set_rng_state(self.states_[name])
         # Do the stuff we wanted to do.
@@ -267,7 +282,8 @@ class CpusRNGStatesTracker:
             # Update the current rng state for later use.
             self.states_[name] = torch.get_rng_state()
             # And set the state to the original state we started with.
-            torch.set_rng_state(orig_cuda_rng_state)
+            print(' restore rng_state:{}'.format(orig_cpus_rng_state))
+            torch.set_rng_state(orig_cpus_rng_state)
 
 # RNG tracker object.
 _CUDA_RNG_STATE_TRACKER = CudaRNGStatesTracker()
