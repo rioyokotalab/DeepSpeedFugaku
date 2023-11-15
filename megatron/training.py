@@ -966,7 +966,7 @@ def training_log(
             timers.write(timers_to_log, writer, iteration, normalizer=total_iterations)
 
     wandb_stats = {}
-    if wandb_writer and (iteration % args.tensorboard_log_interval == 0) and is_last_rank():
+    if (iteration % args.tensorboard_log_interval == 0) and is_last_rank():
         wandb_stats["utils/steps-vs-samples"] = args.consumed_train_samples
         wandb_stats["utils/steps-vs-tokens"] = args.consumed_train_tokens
 
@@ -1132,7 +1132,7 @@ def training_log(
                 writer.add_scalar("optimizer/momentum_abs_max", opt_stats_2[2], iteration)
                 writer.add_scalar("optimizer/weight_abs_max", opt_stats_2[3], iteration)
 
-            if wandb_writer and is_last_rank():
+            if is_last_rank():
                 wandb_stats["optimizer/variance_l2"] = opt_stats[0] ** 0.5 / args.world_size
                 wandb_stats["optimizer/variance_sqrt_l2"] = opt_stats[1] ** 0.5 / args.world_size
                 wandb_stats["optimizer/momentum_l2"] = opt_stats[2] ** 0.5 / args.world_size
@@ -1172,7 +1172,7 @@ def training_log(
         wandb_stats["stats/tokens_per_sec_per_replica"] = tokens_per_sec_per_replica
 
         # only the last rank process has a non-None _GLOBAL_TENSORBOARD_WRITER
-        if wandb_writer and is_last_rank():
+        if is_last_rank():
             if args.log_timers_to_tensorboard:
                 writer.add_scalar(
                     "iteration-time/iteration-time", elapsed_time_per_iteration, iteration
@@ -1193,6 +1193,8 @@ def training_log(
                 wandb_stats["timers/iteration-time"] = elapsed_time_per_iteration
         if wandb_writer:
             wandb.log(wandb_stats, step=iteration)
+        else:
+            print(wandb_stats)
 
         log_string = " iteration {:8d}/{:8d} |".format(iteration, args.train_iters)
         log_string += " consumed samples: {:12d} |".format(args.consumed_train_samples)
@@ -1550,13 +1552,16 @@ def evaluate_and_print_results(
                     args.consumed_train_tokens,
                 )
 
-        if wandb_writer and is_last_rank():
+        if is_last_rank():
             wandb_stats = {}
             data_type = 'test' if test else 'validation'
             wandb_stats[f'lm-loss-validation/{key}_{data_type}'] = total_loss_dict[key].item()
             if args.log_validation_ppl_to_tensorboard:
                 wandb_stats[f'lm-loss-validation/{key}_{data_type}_ppl'] = ppl
-            wandb.log(wandb_stats, step=iteration)
+            if wandb_writer:
+                wandb.log(wandb_stats, step=iteration)
+            else:
+                print(wandb_stats)
 
     length = len(string) + 1
     print_rank_last("-" * length)
