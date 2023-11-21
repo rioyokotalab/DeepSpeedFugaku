@@ -93,6 +93,31 @@ class GPTModel(MegatronModule):
 
         self.initialize_word_embeddings(init_method_normal)
 
+        self.forward_counter = 0
+
+    def debug_print_dump(self, name, t, enable_dump=True):
+        step = self.forward_counter
+        dp_size = mpu.get_data_parallel_world_size()
+        pp_size = mpu.get_pipeline_model_parallel_world_size()
+        tp_size = mpu.get_tensor_model_parallel_world_size()
+        dp_rank = mpu.get_data_parallel_rank()
+        pp_rank = mpu.get_pipeline_model_parallel_rank()
+        tp_rank = mpu.get_tensor_model_parallel_rank()
+
+        size_rank = f'{step},{dp_size},{pp_size},{tp_size},{dp_rank},{pp_rank},{tp_rank}'
+
+        if isinstance(t, torch.Tensor):
+            t_l1norm = torch.norm(t, p=1, dtype=torch.float64).item()
+            t_l2norm = torch.norm(t, p=2, dtype=torch.float64).item()
+            t_sum = torch.sum(t, dtype=torch.float64).item()
+            t_dtype = t.dtype
+            t_shape = t.shape
+            data_info = f'{t_dtype},"{tuple(t_shape)}",{t_sum},{t_l1norm},{t_l2norm}'
+        else:
+            data_info = f'{type(t)},,,,'
+
+        print(f'{step},{size_rank},{name},{data_info}', flush=True)
+
     def set_input_tensor(self, input_tensor):
         """See megatron.model.transformer.set_input_tensor()"""
         self.language_model.set_input_tensor(input_tensor)
@@ -118,6 +143,10 @@ class GPTModel(MegatronModule):
                 # If got a None input, need to reset curriculum_seqlen on user side
                 args.curriculum_seqlen = args.seq_length
 
+        self.debug_print_dump('input_ids', input_ids)
+        self.debug_print_dump('position_ids', position_ids)
+        self.debug_print_dump('attention_mask', attention_mask)
+
         lm_output, *moe_losses = self.language_model(
             input_ids,
             position_ids,
@@ -134,6 +163,12 @@ class GPTModel(MegatronModule):
                     forward_method_parallel_output,
                     self.fp16_lm_cross_entropy)
         
+        self.debug_print_dump('lm_output', lm_output)
+        self.debug_print_dump('moe_losses', moe_losses)
+
+        # increment counter
+        self.forward_counter += 1
+
         if self.return_moe_loss:
             return (lm_output, *moe_losses)
         else:
