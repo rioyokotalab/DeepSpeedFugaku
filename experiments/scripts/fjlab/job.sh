@@ -2,6 +2,7 @@
 #
 # $0 <PYTORCH_TGZ> <MODEL> <TRAINDATA> <PP> <TP> <DP> <MB> <GLOBAL_BATCH> <MYGEMM> <GEMM_DEBUG_FLAG> <WANDBHEAD>
 
+SDIR=`readlink -f "$0" | xargs dirname`
 RANK=$PMIX_RANK
 SIZE=$PJM_NODE
 
@@ -16,10 +17,9 @@ DATA_PARALLEL_SIZE=$1 && shift
 GLOBAL_BATCH=$1 && shift
 MICRO_BATCH_SIZE=$1 && shift
 export MYGEMM=$1 && shift
-if [ $1 -eq 0 ]; then
-  unset A64FX_CBLAS_SGEMM_BATCH_DEGBUG
-else
-  export A64FX_CBLAS_SGEMM_BATCH_DEGBUG=$1
+unset A64FX_CBLAS_SGEMM_BATCH_DEGBUG
+if [ $1 -ne 0 ] && [ $RANK -eq 0 ]; then
+    export A64FX_CBLAS_SGEMM_BATCH_DEGBUG=$1
 fi && shift
 WANDBHEAD=$1 && shift
 SET_TRAIN_ITER=$1 && shift
@@ -205,8 +205,15 @@ EchoAndRun() {
 }
 
 #EchoAndRun numactl -m 4-7 -N 4-7 python pretrain_gpt_ptprof.py \
+#if [ $RANK -lt 4 ] || [ $RANK -ge $(($SIZE-4)) ]; then
+#  export PYPROF_ENABLE=1
+#  export PROF_TRACE_FILE="${SDIR}/trace-${MODELSIZE}-pp${PIPELINE_MODEL_PARALLEL_SIZE}_tp${TENSOR_MODEL_PARALLEL_SIZE}_dp${DATA_PARALLEL_SIZE}_gb${GLOBAL_BATCH}_GEMM${MYGEMM}_${RANK}.json"
+#  CMD="numactl -m 4-7 -N 4-7 memray run -o ${SDIR}/memray-pretrain_gpt-${RANK}.bin"
+#else
+CMD="numactl -m 4-7 -N 4-7 python"
+#fi
 
-EchoAndRun numactl -m 4-7 -N 4-7 python pretrain_gpt.py \
+EchoAndRun $CMD pretrain_gpt.py \
     --num-layers $NUM_LAYERS \
     --hidden-size $HIDDEN_SIZE \
     --num-attention-heads ${NUM_ATTENTION_HEADS} \
@@ -246,15 +253,19 @@ EchoAndRun numactl -m 4-7 -N 4-7 python pretrain_gpt.py \
    --log-validation-ppl-to-tensorboard \
    --log-timers-to-tensorboard \
    --log-optimizer-states-to-tensorboard \
+    --checkpoint-activations \
 
-    #--num-layers-per-virtual-pipeline-stage 1 \
-
-    #--checkpoint-activations \
   #--use-timer \
     #--num-layers-per-virtual-pipeline-stage 2 \
     #--cpu-optimizer \
     #--cpu-torch-adam \
   #--wandb-name "30B-5iter-pp${PIPELINE_MODEL_PARALLEL_SIZE}-tp${TENSOR_MODEL_PARALLEL_SIZE}-dp${DATA_PARALLEL_SIZE}-gb${GLOBAL_BATCH}-GEMM${MYGEMM}-ja${JA_PERTCENT}_en${EN_PERTCENT}_code${CODE_PERTCENT}"
+
+if [ $RANK -eq 0 ]; then
+  for f in ${SDIR}/memray-*.bin; do
+  memray flamegraph $f
+  done
+fi
 
 echo `date` ALL_DONE
 

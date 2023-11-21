@@ -22,6 +22,7 @@ JOBFILE="job.sh"
 DEEPSPEEDFUGAKU=${HOME}/work/DeepSpeedFugaku
 PYTORCH_PATH=/vol0005/mdt3/share/hp230254/pytorch
 PYTORCH_FILE=1697799253.292378221.fcc.pytorch.y.r1.13_for_a64fx.tar.gz # m-ymzk 10/21 w/ tensorboard
+#PYTORCH_FILE=1697799253.292378221.fcc.pytorch.y.r1.13_for_a64fx_memray.tar.gz # for memray
 PYTORCH_TGZ=${PYTORCH_PATH}/${PYTORCH_FILE}
 
 Time=`date "+%y%m%d%H%M%S"`
