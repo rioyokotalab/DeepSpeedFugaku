@@ -15,6 +15,7 @@ TENSOR_MODEL_PARALLEL_SIZE=$1 && shift
 DATA_PARALLEL_SIZE=$1 && shift
 GLOBAL_BATCH=$1 && shift
 MICRO_BATCH_SIZE=$1 && shift
+LOGDIR=$1 && shift
 export MYGEMM=$1 && shift
 if [ $1 -eq 0 ]; then
   unset A64FX_CBLAS_SGEMM_BATCH_DEGBUG
@@ -236,6 +237,7 @@ EchoAndRun numactl -m 4-7 -N 4-7 python pretrain_gpt.py \
    --log-validation-ppl-to-tensorboard \
    --log-timers-to-tensorboard \
    --log-optimizer-states-to-tensorboard \
+   --log-dir $LOGDIR \
 
     #--num-layers-per-virtual-pipeline-stage 1 \
 

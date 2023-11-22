@@ -17,6 +17,7 @@
 
 from functools import partial
 import torch
+import os
 
 from megatron import get_args
 from megatron import mpu
@@ -94,17 +95,23 @@ class GPTModel(MegatronModule):
         self.initialize_word_embeddings(init_method_normal)
 
         self.forward_counter = 0
+        self.log_stat_dir = args.log_dir + '/log_stat'
+        os.makedirs(self.log_stat_dir, exist_ok=True)
 
     def debug_print_dump(self, name, t, enable_dump=True):
         step = self.forward_counter
-        dp_size = mpu.get_data_parallel_world_size()
-        pp_size = mpu.get_pipeline_model_parallel_world_size()
-        tp_size = mpu.get_tensor_model_parallel_world_size()
-        dp_rank = mpu.get_data_parallel_rank()
-        pp_rank = mpu.get_pipeline_model_parallel_rank()
-        tp_rank = mpu.get_tensor_model_parallel_rank()
 
-        size_rank = f'{step},{dp_size},{pp_size},{tp_size},{dp_rank},{pp_rank},{tp_rank}'
+        if step == 0:
+            dp_size = mpu.get_data_parallel_world_size()
+            pp_size = mpu.get_pipeline_model_parallel_world_size()
+            tp_size = mpu.get_tensor_model_parallel_world_size()
+            dp_rank = mpu.get_data_parallel_rank()
+            pp_rank = mpu.get_pipeline_model_parallel_rank()
+            tp_rank = mpu.get_tensor_model_parallel_rank()
+
+            self.size_rank = f'{dp_size},{pp_size},{tp_size},{dp_rank},{pp_rank},{tp_rank}'
+            self.debug_f = open(f'{self.log_stat_dir}/{dp_rank}_{pp_rank}_{tp_rank}.csv', 'w')
+            self.debug_f.write('step,training,dp_size,pp_size,tp_size,dp_rank,pp_rank,tp_rank,name,dtype,shape,sum,l1_norm,l2_norm\n')
 
         if isinstance(t, torch.Tensor):
             t_l1norm = torch.norm(t, p=1, dtype=torch.float64).item()
@@ -116,7 +123,8 @@ class GPTModel(MegatronModule):
         else:
             data_info = f'{type(t)},,,,'
 
-        print(f'{step},{size_rank},{name},{data_info}', flush=True)
+        self.debug_f.write(f'{step},{self.training},{self.size_rank},{name},{data_info}\n')
+        self.debug_f.flush()
 
     def set_input_tensor(self, input_tensor):
         """See megatron.model.transformer.set_input_tensor()"""

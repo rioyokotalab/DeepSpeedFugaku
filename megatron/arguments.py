@@ -983,4 +983,6 @@ def _add_gpt_fugaku_args(parser: argparse.ArgumentParser) -> argparse.ArgumentPa
                        help="If set, profiling start and write profiling result to `timer/job-name/`")
     group.add_argument("--use-flush-denormal", action="store_true",
                        help="If set, torch.set_flush_denornmal(mode=True)")
+    group.add_argument("--log-dir", type=str,
+                       help="Directory for saving logs")
     return parser

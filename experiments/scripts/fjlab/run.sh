@@ -12,6 +12,7 @@
 #PJM -S
 
 ## These definitions will be inserted by submit command
+#RUNDIR=<path-to-script>
 #DEEPSPEEDFUGAKU=<path-to>/DeepSpeedFugaku
 #PYTORCH_TGZ=<path>/...fcc.pytorch...tar.gz
 #JOBSCRIPT=<path-to-script>/job.sh
@@ -45,5 +46,5 @@ dir_transfer ${DEEPSPEEDFUGAKU}/megatron
 
 touch ./JOBID_$PJM_JOBID
 EchoAndRun mpirun -np $NNODES -std-proc ${LOGDIR} \
-         $JOBSCRIPT $DEEPSPEEDFUGAKU $PYTORCH_TGZ $MODEL $TRAINDATA $PP $TP $DP $GB $MB $MYGEMM $GEMM_DEBUG $WANDBHEAD $TRAIN_ITERS
+         $JOBSCRIPT $DEEPSPEEDFUGAKU $PYTORCH_TGZ $MODEL $TRAINDATA $PP $TP $DP $GB $MB $RUNDIR $MYGEMM $GEMM_DEBUG $WANDBHEAD $TRAIN_ITERS
 
