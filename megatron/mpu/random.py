@@ -254,10 +254,9 @@ class CpusRNGStatesTracker:
         the original state."""
         # Check if we have added the state
         if name not in self.states_:
-            print(name, self.states_)
-            raise Exception('cuda rng state {} is not added'.format(name))
+            raise Exception('cpus rng state {} is not added'.format(name))
         # Store current rng state.
-        orig_cuda_rng_state = torch.get_rng_state()
+        orig_cpus_rng_state = torch.get_rng_state()
         # Set rng state to the desired one
         torch.set_rng_state(self.states_[name])
         # Do the stuff we wanted to do.
@@ -267,7 +266,7 @@ class CpusRNGStatesTracker:
             # Update the current rng state for later use.
             self.states_[name] = torch.get_rng_state()
             # And set the state to the original state we started with.
-            torch.set_rng_state(orig_cuda_rng_state)
+            torch.set_rng_state(orig_cpus_rng_state)
 
 # RNG tracker object.
 _CUDA_RNG_STATE_TRACKER = CudaRNGStatesTracker()
