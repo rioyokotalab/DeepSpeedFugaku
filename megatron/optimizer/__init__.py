@@ -12,16 +12,16 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
-try:
+from deepspeed.accelerator import get_accelerator
+if get_accelerator().device_name() == 'cuda' and get_accelerator().is_use():
     from apex.optimizers import FusedAdam as Adam
     from apex.optimizers import FusedSGD as SGD
-except ImportError:
+else:
+    import torch
     from torch.optim import Adam
     from torch.optim import AdamW
     from torch.optim import SGD
 
-import torch
 
 from megatron import get_args
 from megatron.model import LayerNorm
@@ -61,7 +61,7 @@ def get_megatron_optimizer(model):
     if args.create_moe_param_group:
         from deepspeed.moe.utils import is_moe_param, split_params_into_different_moe_groups_for_optimizer
         param_groups = split_params_into_different_moe_groups_for_optimizer(param_groups)
-
+    
     if args.cpu_optimizer:
         assert args.optimizer == 'adam', 'CPU offloading is for Adam'
         if args.cpu_torch_adam:
@@ -76,11 +76,19 @@ def get_megatron_optimizer(model):
                                        eps=args.adam_eps)
     else:
         if args.optimizer == 'adam':
-            optimizer = torch.optim.AdamW(param_groups,
-                                            lr=args.lr,
-                                            weight_decay=args.weight_decay,
-                                            betas=(args.adam_beta1, args.adam_beta2),
-                                            eps=args.adam_eps)
+            device = get_accelerator()
+            if device is not None and device.is_use():
+                optimizer = Adam(param_groups,
+                                 lr=args.lr,
+                                 weight_decay=args.weight_decay,
+                                 betas=(args.adam_beta1, args.adam_beta2),
+                                 eps=args.adam_eps)
+            else:
+                optimizer = AdamW(param_groups,
+                                  lr=args.lr,
+                                  weight_decay=args.weight_decay,
+                                  betas=(args.adam_beta1, args.adam_beta2),
+                                  eps=args.adam_eps)
         elif args.optimizer == 'sgd':
             optimizer = SGD(param_groups,
                             lr=args.lr,

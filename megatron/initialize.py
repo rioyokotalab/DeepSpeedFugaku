@@ -43,9 +43,9 @@ def initialize_megatron(extra_args_provider=None, args_defaults={},
     Returns a function to finalize distributed env initialization 
     (optionally, only when args.lazy_mpu_init == True)
     """
-    # if not allow_no_cuda:
-    #     # Make sure cuda is available.
-    #     assert torch.cuda.is_available(), 'Megatron requires CUDA.'
+    if not allow_no_cuda:
+        # Make sure cuda is available.
+        assert get_accelerator().is_available(), 'Megatron requires accelerator.'
 
     # Parse args, build tokenizer, and set adlr-autoresume,
     # tensorboard-writer, and timers.
@@ -75,7 +75,9 @@ def initialize_megatron(extra_args_provider=None, args_defaults={},
         set_tensor_model_parallel_rank(args.rank)    
         return finish_mpu_init
     else:
-        args.use_cpu_initialization=True
+        device = get_accelerator()
+        if device is None or device.is_use() == False:
+            args.use_cpu_initialization=True
 
         # Megatron's MPU is the master. Complete initialization right away.
         finish_mpu_init()
@@ -87,7 +89,8 @@ def initialize_megatron(extra_args_provider=None, args_defaults={},
         _init_autoresume()
 
         # Compile dependencies.
-        #_compile_dependencies()
+        if device is not None and device.is_use() == False:
+            _compile_dependencies()
 
         # No continuation function
         return None
@@ -131,16 +134,16 @@ def _compile_dependencies():
                   ' back to unfused kernel invocations.', flush=True)
     
     # Always build on rank zero first.
+    device = get_accelerator()
     if _is_rank_0():
         start_time = time.time()
         print('> compiling and loading fused kernels ...', flush=True)
-        if get_accelerator().device_count() > 0: # Skip when CPU-only
+        if device is not None and device.is_used():
             fused_kernels.load(args)
         torch.distributed.barrier()
     else:
         torch.distributed.barrier()
-        if torch.cuda.device_count() > 0: # Skip when CPU-only
-            fused_kernels.load(args)
+        fused_kernels.load(args)
     # Simple barrier to make sure all ranks have passed the
     # compilation phase successfully before moving on to the
     # rest of the program. We think this might ensure that
@@ -167,6 +170,7 @@ def setup_deepspeed_random_and_activation_checkpointing(args):
     print('setup_deepspeed_random_and_activation_checkpointing')
     num_layers = args.num_layers // args.checkpoint_num_layers
     num_layers = num_layers if args.num_layers % args.checkpoint_num_layers == 0 else num_layers + 1
+    device = get_accelerator()
     if args.split_transformers:
         num_layers *= 2
 
@@ -180,20 +184,22 @@ def setup_deepspeed_random_and_activation_checkpointing(args):
         profile=args.profile_backward)
 
     mpu.checkpoint = deepspeed.checkpointing.checkpoint
-    mpu.get_cuda_rng_tracker = deepspeed.checkpointing.get_cuda_rng_tracker
-    mpu.get_cpus_rng_tracker = deepspeed.checkpointing.get_cpus_rng_tracker
-    if get_accelerator().device_count() > 0:
+    if device is not None and device.is_use():
         print('setup_deepspeed_random_and_activation_checkpointing:CUDA')
+        mpu.get_cuda_rng_tracker = deepspeed.checkpointing.get_cuda_rng_tracker
         mpu.model_parallel_cuda_manual_seed = deepspeed.checkpointing.model_parallel_cuda_manual_seed
     else:
         print('setup_deepspeed_random_and_activation_checkpointing:CPUS')
+        mpu.get_cpus_rng_tracker = deepspeed.checkpointing.get_cpus_rng_tracker
         mpu.model_parallel_cpus_manual_seed = deepspeed.checkpointing.model_parallel_cpus_manual_seed
 
 
 def _initialize_distributed():
     """Initialize torch.distributed and mpu."""
     args = get_args()
-    device_count = torch.cuda.device_count()
+    dev_acc = get_accelerator()
+    device_count = dev_acc.device_count() \
+        if dev_acc is not None and dev_acc.is_use() else 0
 
     if torch.distributed.is_initialized():
 
@@ -214,7 +220,7 @@ def _initialize_distributed():
                     'expected local-rank to be the same as rank % device-count.'
             else:
                 args.local_rank = device
-            torch.cuda.set_device(device) # only do so when device_count > 0
+            get_accelerator().set_device(device) # only do so when device_count > 0
 
         # Call the init process
         init_method = 'tcp://'

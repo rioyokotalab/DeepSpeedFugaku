@@ -24,8 +24,7 @@ from megatron import get_timers
 from megatron import mpu
 from .module import MegatronModule
 from megatron.model.enums import AttnMaskType, LayerType, AttnType
-#from megatron.model import LayerNorm
-from torch.nn import LayerNorm
+#from torch.nn import LayerNorm
 from megatron.model.fused_softmax import FusedScaleMaskSoftmax
 from megatron.model.fused_bias_gelu import bias_gelu_impl
 from megatron.model.utils import attention_mask_func, openai_gelu, erf_gelu
@@ -301,13 +300,17 @@ class ParallelAttention(MegatronModule):
                                    output_size[0] * output_size[1], -1)
 
         # preallocting result tensor: [b * np, sq, sk]
-        device = torch.cuda.current_device() if torch.cuda.is_available() else 'cpu'
+        dev_acc = get_accelerator()
+        if dev_acc is not None and dev_acc.is_use():
+            device_name = dev_acc.current_device_name()
+        else:
+            device_name = 'cpu'
         matmul_result = torch.empty(
             output_size[0]*output_size[1],
             output_size[2],
             output_size[3],
             dtype=query_layer.dtype,
-            device=device)
+            device=device_name)
 
         # Raw attention scores. [b * np, sq, sk]
         if args.use_timer:
@@ -362,7 +365,7 @@ class ParallelAttention(MegatronModule):
         # seem a bit unusual, but is taken from the original Transformer paper.
         if args.use_timer:
             timers('attention_dropout').start()
-        if get_accelerator().device_count() > 0:
+        if dev_acc is not None and dev_acc.is_use():
             with mpu.get_cuda_rng_tracker().fork():
                 attention_probs = self.attention_dropout(attention_probs)
         else:
@@ -476,6 +479,11 @@ class ParallelTransformerLayer(MegatronModule):
 
         self.bf16 = args.bf16
         self.fp32_residual_connection = args.fp32_residual_connection
+
+        if args.no_cuda:
+            from torch.nn import LayerNorm
+        else:
+            from megatron.model import LayerNorm
 
         # Layernorm on the input data.
         self.input_layernorm = LayerNorm(
@@ -707,6 +715,11 @@ class ParallelTransformer(MegatronModule):
             'num_layers must be divisible by pipeline_model_parallel_size'
         self.num_layers = args.num_layers // mpu.get_pipeline_model_parallel_world_size()
 
+        if args.no_cuda:
+            from torch.nn import LayerNorm
+        else:
+            from megatron.model import LayerNorm
+
         # Transformer layers.
         def build_layer(layer_number, n_e):
             return ParallelTransformerLayer(
@@ -765,10 +778,14 @@ class ParallelTransformer(MegatronModule):
                 eps=args.layernorm_epsilon)
 
         if deepspeed.checkpointing.is_configured():
-            global get_cuda_rng_tracker, get_cpus_rng_tracker, checkpoint
-            get_cuda_rng_tracker = deepspeed.checkpointing.get_cuda_rng_tracker
-            get_cpus_rng_tracker = deepspeed.checkpointing.get_cpus_rng_tracker
-            checkpoint = deepspeed.checkpointing.checkpoint
+            if arg.no_cuda:
+                global get_cpus_rng_tracker, checkpoint
+                get_cpus_rng_tracker = deepspeed.checkpointing.get_cpus_rng_tracker
+                checkpoint = deepspeed.checkpointing.checkpoint
+            else:
+                global get_cuda_rng_tracker, checkpoint
+                get_cuda_rng_tracker = deepspeed.checkpointing.get_cuda_rng_tracker
+                checkpoint = deepspeed.checkpointing.checkpoint
     def _get_layer(self, layer_number):
         return self.layers[layer_number]
 

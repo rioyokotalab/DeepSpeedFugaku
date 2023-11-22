@@ -24,12 +24,12 @@ except ModuleNotFoundError:
 
 from deepspeed.accelerator import get_accelerator
 
-try:
+if get_accelerator().device_name() == 'cuda' and get_accelerator().is_use():
     from apex.multi_tensor_apply import multi_tensor_applier
     import amp_C
-    has_apex = True
-except ImportError:
-    has_apex = False
+    is_apex = True
+else:
+    is_apex = False
 
 from megatron import mpu
 from megatron.model.module import param_is_not_shared
@@ -64,6 +64,7 @@ def clip_grad_norm_fp32(parameters, max_norm, norm_type=2):
     #   - should not be a replica due to tensor model parallelism
     grads = []
     grads_for_norm = []
+    dev_acc = get_accerelator()
     for param in parameters:
         grad_not_none = param.grad is not None
         is_not_shared = param_is_not_shared(param)
@@ -71,7 +72,10 @@ def clip_grad_norm_fp32(parameters, max_norm, norm_type=2):
         grad = param.grad.detach()
         if grad_not_none:
             # Make sure the grads are in fp32
-            assert param.grad.type() == 'torch.cuda.FloatTensor' or 'torch.FloatTensor' 
+            if is_apex:
+                assert param.grad.type() == 'torch.{}.FloatTensor'.format(dev_acc.device_name())
+            else:
+                assert param.grad.type() == 'torch.FloatTensor' 
             grads.append(grad)
         if grad_not_none and is_not_shared and is_not_tp_duplicate:
             grads_for_norm.append(grad)
@@ -84,7 +88,10 @@ def clip_grad_norm_fp32(parameters, max_norm, norm_type=2):
     # Calculate norm.
     if norm_type == inf:
         total_norm = max(grad.abs().max() for grad in grads_for_norm)
-        total_norm_cuda = torch.FloatTensor([float(total_norm)])
+        if is_apex:
+            total_norm_cuda = dev_acc.FloatTensor([float(total_norm)])
+        else:
+            total_norm_cuda = torch.FloatTensor([float(total_norm)])
         # Take max across all model-parallel GPUs.
         torch.distributed.all_reduce(total_norm_cuda,
                                      op=torch.distributed.ReduceOp.MAX,
@@ -92,8 +99,11 @@ def clip_grad_norm_fp32(parameters, max_norm, norm_type=2):
         total_norm = total_norm_cuda[0].item()
 
     else:
-        if norm_type == 2.0 and has_apex:
-            dummy_overflow_buf = torch.IntTensor([0])
+        if norm_type == 2.0:
+            if is_apex:
+                dummy_overflow_buf = dev_acc.IntTensor([0])
+            else:
+                dummy_overflow_buf = torch.IntTensor([0])
             # Use apex's multi-tensor applier for efficiency reasons.
             # Multi-tensor applier takes a function and a list of list
             # and performs the operation on that list all in one kernel.
@@ -120,15 +130,17 @@ def clip_grad_norm_fp32(parameters, max_norm, norm_type=2):
     # Scale.
     clip_coeff = max_norm / (total_norm + 1.0e-6)
     if clip_coeff < 1.0:
-        if has_apex:
-            dummy_overflow_buf = torch.IntTensor([0])
+        if is_apex:
+            dummy_overflow_buf = dev_acc.IntTensor([0])
             multi_tensor_applier(amp_C.multi_tensor_scale,
                                 dummy_overflow_buf,
                                 [grads, grads],
                                 clip_coeff)
         else:
-            for from_, to_ in zip(grads, grads):
-                to_.copy_(from_*clip_coeff)
+            for g in grads:
+                g.detach().mul_(clip_coeff.to(g.device))
+#            for from_, to_ in zip(grads, grads):
+#                to_.copy_(from_*clip_coeff)
 
     return total_norm
 

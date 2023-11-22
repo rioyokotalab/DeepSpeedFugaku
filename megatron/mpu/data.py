@@ -48,7 +48,11 @@ def _build_key_size_numel_dictionaries(keys, data):
             offset += max_dim
 
     # Move to GPU and broadcast.
-    sizes_cuda = torch.LongTensor(sizes)
+    device = get_accelerator()
+    if device is not None and device.is_use():
+        sizes_cuda = device.LongTensor(sizes)
+    else:
+        sizes_cuda = torch.LongTensor(sizes)
     torch.distributed.broadcast(sizes_cuda, get_tensor_model_parallel_src_rank(),
                                 group=get_tensor_model_parallel_group())
 
@@ -97,7 +101,7 @@ def broadcast_data(keys, data, datatype):
         timers('_build_key_size_numel_dictionaries').stop()
 
     # Pack on rank zero.
-    device = torch.cuda.current_device() if torch.cuda.is_available() else 'cpu'
+    device = get_accelerator()
     if args.use_timer:
         timers('pack').start()
     if get_tensor_model_parallel_rank() == 0:
@@ -105,10 +109,12 @@ def broadcast_data(keys, data, datatype):
         _check_data_types(keys, data, datatype)
         # Flatten the data associated with the keys
         flatten_data = torch.cat(
-            [data[key].contiguous().view(-1) for key in keys], dim=0).to(device)
+            [data[key].contiguous().view(-1) for key in keys], dim=0).to(
+                device.device_name() if device is not None and device.is_use() else 'cpu')
     else:
         flatten_data = torch.empty(total_numel,
-                                   device=device,
+                                   device=device.current_device_name() \
+                                   if device is not None and device.is_use() else 'cpu',
                                    dtype=datatype)
     if args.use_timer:
         timers('pack').stop()

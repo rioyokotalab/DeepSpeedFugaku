@@ -44,7 +44,7 @@ _GLOBAL_TIMERS: typing.Optional[Timers] = None
 
 def get_args() -> argparse.Namespace:
     """Return arguments."""
-    _ensure_var_is_initialized(_GLOBAL_ARGS, "args")
+    _ensure_var_is_initialized(_GLOBAL_ARGS, 'args')
     return _GLOBAL_ARGS  # type: ignore
 
 
@@ -57,12 +57,13 @@ def get_current_global_batch_size() -> int:
 
 
 def update_num_microbatches(consumed_samples, consistency_check=True):
-    _GLOBAL_NUM_MICROBATCHES_CALCULATOR.update(consumed_samples, consistency_check)
+    _GLOBAL_NUM_MICROBATCHES_CALCULATOR.update(consumed_samples,
+                                               consistency_check)
 
 
 def get_tokenizer():
     """Return tokenizer."""
-    _ensure_var_is_initialized(_GLOBAL_TOKENIZER, "tokenizer")
+    _ensure_var_is_initialized(_GLOBAL_TOKENIZER, 'tokenizer')
     return _GLOBAL_TOKENIZER
 
 
@@ -88,17 +89,16 @@ def get_adlr_autoresume():
 
 def get_timers() -> Timers:
     """Return timers."""
-    _ensure_var_is_initialized(_GLOBAL_TIMERS, "timers")
+    _ensure_var_is_initialized(_GLOBAL_TIMERS, 'timers')
     return _GLOBAL_TIMERS  # type: ignore
 
 
-def set_global_variables(extra_args_provider=None, args_defaults={}, ignore_unknown_args=False):
+def set_global_variables(extra_args_provider=None, args_defaults={},
+                         ignore_unknown_args=False):
     """Set args, tokenizer, tensorboard-writer, adlr-autoresume, and timers."""
-    args = _parse_args(
-        extra_args_provider=extra_args_provider,
-        defaults=args_defaults,
-        ignore_unknown_args=ignore_unknown_args,
-    )
+    args = _parse_args(extra_args_provider=extra_args_provider,
+                       defaults=args_defaults,
+                       ignore_unknown_args=ignore_unknown_args)
     _build_num_microbatches_calculator(args)
     if args.vocab_file:
         _ = _build_tokenizer(args)
@@ -113,28 +113,26 @@ def _parse_args(
 ) -> argparse.Namespace:
     """Parse entire arguments."""
     global _GLOBAL_ARGS
-    _ensure_var_is_not_initialized(_GLOBAL_ARGS, "args")
-    _GLOBAL_ARGS = parse_args(
-        extra_args_provider=extra_args_provider,
-        defaults=defaults,
-        ignore_unknown_args=ignore_unknown_args,
-    )
+    _ensure_var_is_not_initialized(_GLOBAL_ARGS, 'args')
+    _GLOBAL_ARGS = parse_args(extra_args_provider=extra_args_provider,
+                              defaults=defaults,
+                              ignore_unknown_args=ignore_unknown_args)
     return _GLOBAL_ARGS
 
 
 def _build_num_microbatches_calculator(args: argparse.Namespace) -> None:
     global _GLOBAL_NUM_MICROBATCHES_CALCULATOR
-    _ensure_var_is_not_initialized(
-        _GLOBAL_NUM_MICROBATCHES_CALCULATOR, "num microbatches calculator"
-    )
+    _ensure_var_is_not_initialized(_GLOBAL_NUM_MICROBATCHES_CALCULATOR,
+                                   'num microbatches calculator')
 
-    _GLOBAL_NUM_MICROBATCHES_CALCULATOR = build_num_microbatches_calculator(args)
+    _GLOBAL_NUM_MICROBATCHES_CALCULATOR = build_num_microbatches_calculator(
+        args)
 
 
 def _build_tokenizer(args):
     """Initialize tokenizer."""
     global _GLOBAL_TOKENIZER
-    _ensure_var_is_not_initialized(_GLOBAL_TOKENIZER, "tokenizer")
+    _ensure_var_is_not_initialized(_GLOBAL_TOKENIZER, 'tokenizer')
     _GLOBAL_TOKENIZER = build_tokenizer(args)
     return _GLOBAL_TOKENIZER
 
@@ -148,27 +146,21 @@ def rebuild_tokenizer(args):
 def _set_tensorboard_writer(args):
     """Set tensorboard writer."""
     global _GLOBAL_TENSORBOARD_WRITER
-    _ensure_var_is_not_initialized(_GLOBAL_TENSORBOARD_WRITER, "tensorboard writer")
+    _ensure_var_is_not_initialized(_GLOBAL_TENSORBOARD_WRITER,
+                                   'tensorboard writer')
 
-    if (
-        hasattr(args, "tensorboard_dir")
-        and args.tensorboard_dir
-        and args.rank == (args.world_size - 1)
-    ):
+    if hasattr(args, 'tensorboard_dir') and \
+       args.tensorboard_dir and args.rank == (args.world_size - 1):
         try:
             from torch.utils.tensorboard import SummaryWriter
-
-            print("> setting tensorboard ...")
+            print('> setting tensorboard ...')
             _GLOBAL_TENSORBOARD_WRITER = SummaryWriter(
-                log_dir=args.tensorboard_dir, max_queue=args.tensorboard_queue_size
-            )
+                log_dir=args.tensorboard_dir,
+                max_queue=args.tensorboard_queue_size)
         except ModuleNotFoundError:
-            print(
-                "WARNING: TensorBoard writing requested but is not "
-                "available (are you using PyTorch 1.1.0 or later?), "
-                "no TensorBoard logs will be written.",
-                flush=True,
-            )
+            print('WARNING: TensorBoard writing requested but is not '
+                  'available (are you using PyTorch 1.1.0 or later?), '
+                  'no TensorBoard logs will be written.', flush=True)
 
 
 def _set_wandb_writer(args: argparse.Namespace) -> None:
@@ -212,16 +204,16 @@ def _set_wandb_writer(args: argparse.Namespace) -> None:
 def _set_adlr_autoresume(args):
     """Initialize ADLR autoresume."""
     global _GLOBAL_ADLR_AUTORESUME
-    _ensure_var_is_not_initialized(_GLOBAL_ADLR_AUTORESUME, "adlr autoresume")
+    _ensure_var_is_not_initialized(_GLOBAL_ADLR_AUTORESUME, 'adlr autoresume')
 
     if args.adlr_autoresume:
         if args.rank == 0:
-            print("enabling autoresume ...", flush=True)
-        sys.path.append(os.environ.get("SUBMIT_SCRIPTS", "."))
+            print('enabling autoresume ...', flush=True)
+        sys.path.append(os.environ.get('SUBMIT_SCRIPTS', '.'))
         try:
             from userlib.auto_resume import AutoResume
         except BaseException:
-            print("ADLR autoresume is not available, exiting ...")
+            print('ADLR autoresume is not available, exiting ...')
             sys.exit()
 
         _GLOBAL_ADLR_AUTORESUME = AutoResume
@@ -230,18 +222,18 @@ def _set_adlr_autoresume(args):
 def _set_timers() -> None:
     """Initialize timers."""
     global _GLOBAL_TIMERS
-    _ensure_var_is_not_initialized(_GLOBAL_TIMERS, "timers")
+    _ensure_var_is_not_initialized(_GLOBAL_TIMERS, 'timers')
     _GLOBAL_TIMERS = Timers()
 
 
 def _ensure_var_is_initialized(var, name):
     """Make sure the input variable is not None."""
-    assert var is not None, "{} is not initialized.".format(name)
+    assert var is not None, '{} is not initialized.'.format(name)
 
 
 def _ensure_var_is_not_initialized(var, name):
     """Make sure the input variable is not None."""
-    assert var is None, "{} is already initialized.".format(name)
+    assert var is None, '{} is already initialized.'.format(name)
 
 
 class _Timer:
@@ -252,21 +244,24 @@ class _Timer:
         self.elapsed_ = 0.0
         self.started_ = False
         self.start_time = time.time()
+        self.device = get_accelerator()
 
     def start(self) -> None:
         """Start the timer."""
-        assert not self.started_, "timer has already been started"
-        # torch.cuda.synchronize()
+        assert not self.started_, 'timer has already been started'
+        if self.device is not None:
+            device.synchronize()
         # torch.distributed.barrier()
         self.start_time = time.time()
         self.started_ = True
 
     def stop(self) -> None:
         """Stop the timer."""
-        assert self.started_, "timer is not started"
-        # torch.cuda.synchronize()
+        assert self.started_, 'timer is not started'
+        if self.device is not None:
+            device.synchronize()
         # torch.distributed.barrier()
-        self.elapsed_ += time.time() - self.start_time
+        self.elapsed_ += (time.time() - self.start_time)
         self.started_ = False
 
     def reset(self) -> None:
@@ -302,14 +297,7 @@ class Timers:
             self.timers[name] = _Timer(name)
         return self.timers[name]
 
-    def write(
-        self,
-        names: list[str],
-        writer,
-        iteration: int,
-        normalizer: float = 1.0,
-        reset: bool = False,
-    ) -> None:
+    def write(self, names: list[str], writer, iteration: int, normalizer: float = 1.0, reset: bool = False) -> None:
         """Write timers to a tensorboard writer"""
         # currently when using add_scalars,
         # torch.utils.add_scalars makes each timer its own run, which
@@ -317,17 +305,19 @@ class Timers:
         assert normalizer > 0.0
         for name in names:
             value = self.timers[name].elapsed(reset=reset) / normalizer
-            writer.add_scalar(name + "-time", value, iteration)
+            writer.add_scalar(name + '-time', value, iteration)
 
     def log(self, names, normalizer=1.0, reset=True):
         """Log a group of timers."""
         assert normalizer > 0.0
-        string = "time (ms)"
+        string = 'time (ms)'
         for name in names:
-            elapsed_time = self.timers[name].elapsed(reset=reset) * 1000.0 / normalizer
-            string += " | {}: {:.2f}".format(name, elapsed_time)
+            elapsed_time = self.timers[name].elapsed(
+                reset=reset) * 1000.0 / normalizer
+            string += ' | {}: {:.2f}'.format(name, elapsed_time)
         if torch.distributed.is_initialized():
-            if torch.distributed.get_rank() == (torch.distributed.get_world_size() - 1):
+            if torch.distributed.get_rank() == (
+                    torch.distributed.get_world_size() - 1):
                 print(string, flush=True)
         else:
             print(string, flush=True)

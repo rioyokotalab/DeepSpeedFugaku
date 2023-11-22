@@ -26,7 +26,11 @@ class MegatronGradScaler(ABC):
     def __init__(self, initial_scale):
         """Initialize scale value with the input initial scale."""
         assert initial_scale > 0.0
-        self._scale = torch.FloatTensor([initial_scale])
+        device = get_accelerator()
+        if device is not None and device.is_use():
+            self._scale = device.FloatTensor([initial_scale])
+        else:
+            self._scale = torch.FloatTensor([initial_scale])
 
     @property
     def scale(self):
@@ -72,16 +76,22 @@ class DynamicGradScaler(MegatronGradScaler):
         during training."""
         super(DynamicGradScaler, self).__init__(initial_scale)
 
+        device = get_accelerator()
+        is_cuda = True if device is not None and device.is_use() else: False
+
         # Lower bound on the scale.
         assert min_scale > 0.0
         assert min_scale <= initial_scale
-        self.min_scale = torch.FloatTensor([min_scale])
+        self.min_scale = device.FloatTensor([min_scale]) \
+            if is_cuda else torch.FloatTensor([min_scale])
         # Growth and backoff factors for the scale.
         assert growth_factor > 1.0
-        self.growth_factor = torch.FloatTensor([growth_factor])
+        self.growth_factor = device.FloatTensor([growth_factor]) \
+            if is_cuda else torch.FloatTensor([growth_factor])
         assert backoff_factor < 1.0
         assert backoff_factor > 0.0
-        self.backoff_factor = torch.FloatTensor([backoff_factor])
+        self.backoff_factor = device.FloatTensor([backoff_factor]t) \
+            if is_cuda else orch.FloatTensor([backoff_factor])
         # Interval over which if we don't see any inf/nan,
         # we will scale the grad scale by the growth factor.
         assert growth_interval > 0

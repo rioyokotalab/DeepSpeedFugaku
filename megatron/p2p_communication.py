@@ -42,6 +42,11 @@ def _communicate(tensor_send_next, tensor_send_prev, recv_prev, recv_next,
         (tensor_recv_prev, tensor_recv_next)
     """
     args = get_args()
+    dev_acc = get_accelerator()
+    if dev_acc is not None and dev_acc.is_use():
+        device_name = dev_acc.current_device_name()
+    else:
+        device_name = 'cpu'
 
     # Create placeholder tensors for receive in forward and backward directions
     # if needed.
@@ -57,16 +62,14 @@ def _communicate(tensor_send_next, tensor_send_prev, recv_prev, recv_next,
     if args.fp32_residual_connection:
         dtype = torch.float
     if recv_prev:
-        device = torch.cuda.current_device() if torch.cuda.is_available() else 'cpu'
         tensor_recv_prev = torch.empty(tensor_chunk_shape,
                                        requires_grad=True,
-                                       device=device,
+                                       device=device_name,
                                        dtype=dtype)
     if recv_next:
-        device = torch.cuda.current_device() if torch.cuda.is_available() else 'cpu'
         tensor_recv_next = torch.empty(tensor_chunk_shape,
                                        requires_grad=True,
-                                       device=device,
+                                       device=device_name,
                                        dtype=dtype)
 
     # Split tensor into smaller chunks if using scatter-gather optimization.
@@ -111,8 +114,8 @@ def _communicate(tensor_send_next, tensor_send_prev, recv_prev, recv_next,
             for req in reqs:
                 req.wait()
     # To protect against race condition when using batch_isend_irecv().
-    # torch.cuda.synchronize()
-    # torch.distributed.barrier()
+    if dev_acc is not True and dev_acc.is_use():
+        dev_acc.synchronize()
 
     # If using scatter-gather optimization, gather smaller chunks.
     if args.scatter_gather_tensors_in_pipeline:

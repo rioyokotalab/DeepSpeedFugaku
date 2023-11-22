@@ -40,7 +40,6 @@ _MODEL_PARALLEL_RNG_TRACKER_NAME = 'model-parallel-rng'
 # Whether apply model parallelsim to checkpointed hidden states.
 _CHECKPOINTED_ACTIVATIONS_MEMORY_BUFFER = None
 
-no_cuda = not torch.cuda.is_available()
 seed_offset = 2718
 
 def init_checkpointed_activations_memory_buffer():
@@ -103,6 +102,7 @@ def _set_cuda_rng_state(new_state, device=-1):
 
     get_accelerator().lazy_call(cb)
 
+
 def split_tensor_into_1d_equal_chunks(tensor):
     """Break a tensor into equal 1D chunks."""
     data = tensor.view(-1)
@@ -117,9 +117,13 @@ def gather_split_1d_tensor(tensor):
     world_size = get_tensor_model_parallel_world_size()
     numel = torch.numel(tensor)
     numel_gathered = world_size * numel
-    device = torch.cuda.current_device() if torch.cuda.is_available() else 'cpu'
+    dev_acc = get_accerelator()
+    if dev_acc is not None and dev_acc.is_use():
+        device_name = dev_acc.current_device_name()
+    else:
+        device_name = 'cpu'
     gathered = torch.empty(numel_gathered, dtype=tensor.dtype,
-                           device=device,
+                           device=device_name,
                            requires_grad=False)
     chunks = [gathered[i*numel:(i+1)*numel] for i in range(world_size)]
     torch.distributed.all_gather(chunks, tensor,
@@ -167,7 +171,7 @@ class CudaRNGStatesTracker:
 
     def add(self, name, seed):
         """Track the rng state."""
-        print('CudaRNGStatesTracker.add:{},{}'.format(name).format(seed))
+        print('CudaRNGStatesTracker.add:{},{}'.format(name, seed))
         # Check seed is not already used.
         if seed in self.seeds_:
             raise Exception('seed {} already exists'.format(seed))
@@ -187,14 +191,14 @@ class CudaRNGStatesTracker:
     def fork(self, name=_MODEL_PARALLEL_RNG_TRACKER_NAME):
         """Fork the cuda rng state, perform operations, and exit with
         the original state."""
-        print('CudaRNGStatesTracker.fork:{}'.format(name))
+#        print('CudaRNGStatesTracker.fork:{}'.format(name))
         # Check if we have added the state
         if name not in self.states_:
             print(name, self.states_)
             raise Exception('cuda rng state {} is not added'.format(name))
         # Store current rng state.
         orig_cuda_rng_state = get_accelerator().get_rng_state()
-        print(' set_rng_state:{}'.format(self.states_[name]))
+#        print(' set_rng_state:{}'.format(self.states_[name]))
         # Set rng state to the desired one
         _set_cuda_rng_state(self.states_[name])
         # Do the stuff we wanted to do.
@@ -204,7 +208,7 @@ class CudaRNGStatesTracker:
             # Update the current rng state for later use.
             self.states_[name] = get_accelerator().get_rng_state()
             # And set the state to the original state we started with.
-            print(' restore rng_state:{}'.format(orig_cuda_rng_state))
+#            print(' restore rng_state:{}'.format(orig_cuda_rng_state))
             _set_cuda_rng_state(orig_cuda_rng_state)
 
 class CpusRNGStatesTracker:
@@ -386,11 +390,12 @@ class CheckpointFunction(torch.autograd.Function):
     @staticmethod
     def forward(ctx, run_function, *args):
         ctx.run_function = run_function
+        device = get_accelerator()
 
         # Copy the rng states.
         ctx.fwd_cpu_rng_state = torch.get_rng_state()
-        if torch.cuda.is_available():
-            ctx.fwd_cuda_rng_state = torch.cuda.get_rng_state()
+        if device is not None and device.is_use():
+            ctx.fwd_cuda_rng_state = device.get_rng_state()
             ctx.fwd_cuda_rng_state_tracker = get_cuda_rng_tracker().get_states()
         else:
             ctx.fwd_cpus_rng_state = torch.get_rng_state()
@@ -419,14 +424,16 @@ class CheckpointFunction(torch.autograd.Function):
             raise RuntimeError("Checkpointing is not compatible with .grad(), "
                                "please use .backward() if possible")
         inputs = ctx.saved_tensors
+        device = get_accelerator()
+
         if _CHECKPOINTED_ACTIVATIONS_MEMORY_BUFFER is not None:
             inputs[0].data = gather_split_1d_tensor(inputs[0].data)
             inputs[0].data = inputs[0].data.view(ctx.input_0_shape)
 
         # Store the current states.
         bwd_cpu_rng_state = torch.get_rng_state()
-        if torch.cuda.is_available():
-            bwd_cuda_rng_state = torch.cuda.get_rng_state()
+        if device is not None and device.is_use():
+            bwd_cuda_rng_state = device.get_rng_state()
             bwd_cuda_rng_state_tracker = get_cuda_rng_tracker().get_states()
         else:
             bwd_cpus_rng_state = torgh.get_rng_state()
@@ -448,18 +455,19 @@ class CheckpointFunction(torch.autograd.Function):
 
         # Set the states back to what it was at the start of this function.
         torch.set_rng_state(bwd_cpu_rng_state)
-        if torch.cuda.is_available():
+        if device is not None and device.is_use():
             _set_cuda_rng_state(bwd_cuda_rng_state)
             get_cuda_rng_tracker().set_states(bwd_cuda_rng_state_tracker)
+            device_name = device.device_name()
         else:
             _set_cpus_rng_state(bwd_cpus_rng_state)
             get_cpus_rng_tracker().set_states(bwd_cpus_rng_state_tracker)
+            device_name = 'cpu'
 
         if isinstance(outputs, torch.Tensor):
             outputs = (outputs,)
         elif len(outputs) == 2 and isinstance(outputs[1], torch.Tensor) and \
-                torch.equal(outputs[1], torch.tensor(0.)):
-                #torch.equal(outputs[1], torch.tensor(0)):
+                torch.equal(outputs[1], torch.tensor(0).to(device_name)):
             # a hacky solution to overcome issue when running old script examples/pretrain_gpt_distributed.sh
             outputs = (outputs[0],)
         torch.autograd.backward(outputs, args)

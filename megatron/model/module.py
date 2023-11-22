@@ -100,8 +100,15 @@ class MegatronModule(torch.nn.Module):
         # Ensure that first and last stages have the same initial parameter
         # values.
         if torch.distributed.is_initialized():
+            device = get_accelerator()
+            if device is not None and device.is_use():
+                current_device = device.curret_device()
+            else:
+                current_device = 'cpu'
+            self.word_embeddings_weight().to(device=get_accelerator().current_device())
+            embeddings = self.word_embeddings_weight().to(device=current_device)
             if mpu.is_pipeline_first_stage() or mpu.is_pipeline_last_stage():
-                torch.distributed.all_reduce(self.word_embeddings_weight().data,
+                torch.distributed.all_reduce(embeddings.data,
                                              group=mpu.get_embedding_group())
         else:
             print("WARNING! Distributed processes aren't initialized, so "
