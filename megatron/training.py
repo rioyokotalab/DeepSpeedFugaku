@@ -1310,7 +1310,7 @@ def train(
     # (Same PP, non-TP) parallel region should have same seed here.
     # Before come to this line, has random-number generator been used by TP_rank0?
     args = get_args()
-    torch.manual_seed(args.seed)
+    torch.manual_seed(args.seed + mpu.get_pipeline_model_parallel_rank())
 
     while iteration < args.train_iters and (
         args.train_tokens is None or args.consumed_train_tokens < args.train_tokens
