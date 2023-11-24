@@ -155,6 +155,8 @@ class GPTModel(MegatronModule):
         self.debug_print_dump('position_ids', position_ids)
         self.debug_print_dump('attention_mask', attention_mask)
 
+        self.debug_print_dump('cpu_rng_state', torch.get_rng_state())
+
         lm_output, *moe_losses = self.language_model(
             input_ids,
             position_ids,
