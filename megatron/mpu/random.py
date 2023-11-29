@@ -40,7 +40,7 @@ _MODEL_PARALLEL_RNG_TRACKER_NAME = 'model-parallel-rng'
 # Whether apply model parallelsim to checkpointed hidden states.
 _CHECKPOINTED_ACTIVATIONS_MEMORY_BUFFER = None
 
-no_cuda = not torch.cuda.is_available()
+# 2718 is just for fun and any POSITIVE value will work.
 seed_offset = 2718
 
 def init_checkpointed_activations_memory_buffer():
@@ -298,8 +298,6 @@ def model_parallel_cuda_manual_seed(seed):
                               groups. This is used for example for dropout in
                               model parallel regions.
     """
-    # 2718 is just for fun and any POSITIVE value will work.
-    global seed_offset
     offset = seed + seed_offset
     tensor_model_parallel_seed = offset + get_tensor_model_parallel_rank()
     # Data parallel gets the original seed.
@@ -320,7 +318,7 @@ def model_parallel_cuda_manual_seed(seed):
                                 tensor_model_parallel_seed)
 
 def model_parallel_cpus_manual_seed(seed):
-    """Initialize model parallel cuda seed.
+    """Initialize model parallel CPUs seed.
 
     This function should be called after the model parallel is
     initialized. Also, no torch.cuda.manual_seed should be called
@@ -328,23 +326,21 @@ def model_parallel_cpus_manual_seed(seed):
     function.
     Two set of RNG states are tracked:
         default state: This is for data parallelism and is the same among a
-                       set of model parallel GPUs but different across
+                       set of model parallel CPUs but different across
                        different model paralle groups. This is used for
                        example for dropout in the non-tensor-model-parallel regions.
         tensor-model-parallel state: This state is different among a set of model
-                              parallel GPUs, but the same across data parallel
+                              parallel CPUs, but the same across data parallel
                               groups. This is used for example for dropout in
                               model parallel regions.
     """
-    # 2718 is just for fun and any POSITIVE value will work.
-    global seed_offset
     offset = seed + seed_offset
     tensor_model_parallel_seed = offset + get_tensor_model_parallel_rank()
     # Data parallel gets the original seed.
     data_parallel_seed = seed
 
     if torch.distributed.get_rank() == 0:
-        print('> initializing model parallel cuda seeds on global rank {}, '
+        print('> initializing model parallel cpus seeds on global rank {}, '
               'model parallel rank {}, and data parallel rank {} with '
               'model parallel seed: {} and data parallel seed: {}'.format(
                   torch.distributed.get_rank(), get_tensor_model_parallel_rank(),
@@ -370,11 +366,10 @@ class CheckpointFunction(torch.autograd.Function):
 
         # Copy the rng states.
         ctx.fwd_cpu_rng_state = torch.get_rng_state()
-        if torch.cuda.is_available():
+        if not get_args().no_cuda:
             ctx.fwd_cuda_rng_state = torch.cuda.get_rng_state()
             ctx.fwd_cuda_rng_state_tracker = get_cuda_rng_tracker().get_states()
         else:
-            ctx.fwd_cpus_rng_state = torch.get_rng_state()
             ctx.fwd_cpus_rng_state_tracker = get_cpus_rng_tracker().get_states()
 
         with torch.no_grad():
@@ -396,6 +391,8 @@ class CheckpointFunction(torch.autograd.Function):
 
     @staticmethod
     def backward(ctx, *args):
+        no_cuda = get_args().no_cuda
+
         if not torch.autograd._is_checkpoint_valid():
             raise RuntimeError("Checkpointing is not compatible with .grad(), "
                                "please use .backward() if possible")
@@ -406,20 +403,18 @@ class CheckpointFunction(torch.autograd.Function):
 
         # Store the current states.
         bwd_cpu_rng_state = torch.get_rng_state()
-        if torch.cuda.is_available():
+        if not no_cuda:
             bwd_cuda_rng_state = torch.cuda.get_rng_state()
             bwd_cuda_rng_state_tracker = get_cuda_rng_tracker().get_states()
         else:
-            bwd_cpus_rng_state = torgh.get_rng_state()
             bwd_cpus_rng_state_tracker = get_cpus_rng_tracker().get_states()
 
         # Set the states to what it used to be before the forward pass.
         torch.set_rng_state(ctx.fwd_cpu_rng_state)
-        if torch.cuda.is_available():
+        if not no_cuda:
             _set_cuda_rng_state(ctx.fwd_cuda_rng_state)
             get_cuda_rng_tracker().set_states(ctx.fwd_cuda_rng_state_tracker)
         else:
-            _set_cpus_rng_state(ctx.fwd_cpus_rng_state)
             get_cpus_rng_tracker().set_states(ctx.fwd_cpus_rng_state_tracker)
 
         # Compute the forward pass.
@@ -429,11 +424,10 @@ class CheckpointFunction(torch.autograd.Function):
 
         # Set the states back to what it was at the start of this function.
         torch.set_rng_state(bwd_cpu_rng_state)
-        if torch.cuda.is_available():
+        if not no_cuda:
             _set_cuda_rng_state(bwd_cuda_rng_state)
             get_cuda_rng_tracker().set_states(bwd_cuda_rng_state_tracker)
         else:
-            _set_cpus_rng_state(bwd_cpus_rng_state)
             get_cpus_rng_tracker().set_states(bwd_cpus_rng_state_tracker)
 
         if isinstance(outputs, torch.Tensor):
