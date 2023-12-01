@@ -28,6 +28,7 @@ from megatron import get_args
 from megatron.memory import allocate_mem_buff
 
 from .initialize import get_data_parallel_rank
+from .initialize import get_pipeline_model_parallel_rank
 from .initialize import get_tensor_model_parallel_group
 from .initialize import get_tensor_model_parallel_rank
 from .initialize import get_tensor_model_parallel_world_size
@@ -372,8 +373,10 @@ class CheckpointFunction(torch.autograd.Function):
         else:
             ctx.fwd_cpus_rng_state_tracker = get_cpus_rng_tracker().get_states()
 
+        dump_rng_state('before forward in forward')
         with torch.no_grad():
             outputs = run_function(*args)
+        dump_rng_state('after  forward in forward')
 
         # Divide hidden states across model parallel group and only keep
         # the chunk corresponding to the current rank.
@@ -418,6 +421,7 @@ class CheckpointFunction(torch.autograd.Function):
             get_cpus_rng_tracker().set_states(ctx.fwd_cpus_rng_state_tracker)
 
         # Compute the forward pass.
+        dump_rng_state('before forward in backward')
         detached_inputs = detach_variable(inputs)
         with torch.enable_grad():
             outputs = ctx.run_function(*detached_inputs)
@@ -437,6 +441,7 @@ class CheckpointFunction(torch.autograd.Function):
                 #torch.equal(outputs[1], torch.tensor(0)):
             # a hacky solution to overcome issue when running old script examples/pretrain_gpt_distributed.sh
             outputs = (outputs[0],)
+        dump_rng_state('before backward in backward')
         torch.autograd.backward(outputs, args)
         grads = tuple(inp.grad if isinstance(inp, torch.Tensor) else inp
                       for inp in detached_inputs)
@@ -447,3 +452,36 @@ def checkpoint(function, *args):
     """Checkpoint a model or part of the model.
     This has been directly copied from torch.utils.checkpoint."""
     return CheckpointFunction.apply(function, *args)
+
+def dump_rng_state(i, tp_seed=True):
+    import numpy as np
+
+    rank = 'DP{},PP{},TP{}'.format(get_data_parallel_rank(), \
+                                   get_pipeline_model_parallel_rank(), \
+                                   get_tensor_model_parallel_rank())
+
+    print('rng_state,{},{},np,{}'.format(i, rank, np.random.get_state(False)))
+
+    def statics(i):
+        sum = i.sum()
+        non_zero = i.count_nonzero()
+        var = i.float().var()
+        mean = i.float().mean()
+        return sum, non_zero, var, mean
+
+    state = torch.get_rng_state()
+    sum, non_zero, var, mean = statics(state)
+    print('rng_state,{},{},torch,{},{},{},{}'.format(i, rank, sum, non_zero, var, mean))
+
+    if tp_seed:
+        no_cuda = get_args().no_cuda
+        if not no_cuda:
+            sum, non_zero, var, mean = statics(get_accelerator().get_rng_state())
+            print('rng_state,{},{},cuda.seed,{},{},{},{}'.format(i, rank, sum, non_zero, var, mean))
+            with get_cuda_rng_tracker().fork():
+                sum, non_zero, var, mean = statics(get_accelerator().get_rng_state())
+                print('rng_state,{},{},cuda.tp_seed,{},{},{},{}'.format(i, rank, sum, non_zero, var, mean))
+        else:
+            with get_cpus_rng_tracker().fork():
+                sum, non_zero, var, mean = statics(torch.get_rng_state())
+                print('rng_state,{},{},torch.tp_seed,{},{},{},{}'.format(i, rank, sum, non_zero, var, mean))

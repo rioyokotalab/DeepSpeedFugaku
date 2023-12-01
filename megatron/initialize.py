@@ -256,10 +256,13 @@ def _set_random_seed(seed_):
         random.seed(seed)
         np.random.seed(seed)
         torch.manual_seed(seed)
+        mpu.random.dump_rng_state('before tp seed setting', False)
+
         if get_accelerator().device_count() > 0:
             mpu.model_parallel_cuda_manual_seed(seed)
         else:
             mpu.model_parallel_cpus_manual_seed(seed)
+        mpu.random.dump_rng_state('after tp seed setting')
     else:
         raise ValueError('Seed ({}) should be a positive integer.'.format(seed))
 

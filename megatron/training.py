@@ -107,6 +107,7 @@ def pretrain(
 
     # Initalize and get arguments, timers, and Tensorboard writer.
     initialize_megatron(extra_args_provider=extra_args_provider, args_defaults=args_defaults)
+    mpu.random.dump_rng_state('after initialize_megatron')
 
     # Adjust the startup time so it reflects the largest value.
     # This will be closer to what scheduler will see (outside of
@@ -162,6 +163,8 @@ def pretrain(
     # default timers
     timers("model-and-optimizer-setup").stop()
     print_datetime("after model, optimizer, and learning rate " "scheduler are built")
+    mpu.random.dump_rng_state('after model-and-optimizer-setup')
+
 
     # Data stuff.
 
@@ -196,6 +199,7 @@ def pretrain(
     # default timers
     timers("train/valid/test-data-iterators-setup").stop()
     print_datetime("after dataloaders are built")
+    mpu.random.dump_rng_state('after dataloader built')
 
     # args.teacher_model is used as global variable to pass the teacher model
     # for knowledge distillation. Users do not need to set it in the command
@@ -1312,6 +1316,7 @@ def train(
     args = get_args()
     torch.manual_seed(args.seed + mpu.get_pipeline_model_parallel_rank())
 
+    mpu.random.dump_rng_state('before training iteration')
     while iteration < args.train_iters and (
         args.train_tokens is None or args.consumed_train_tokens < args.train_tokens
     ):
@@ -1330,17 +1335,24 @@ def train(
         if args.use_timer:
             timers('train_step').start()
         from torch.profiler import profile, ProfilerActivity
-        with profile(activities=[ProfilerActivity.CPU]) as prof:
-            loss_dict, skipped_iter, grad_norm, num_zeros_in_grad = train_step(
+        profile_on = True
+        if profile_on:
+            with profile(activities=[ProfilerActivity.CPU]) as prof:
+                loss_dict, skipped_iter, grad_norm, num_zeros_in_grad = train_step(
+                    forward_step_func, train_data_iterator, model, optimizer, lr_scheduler
+                )
+        else:
+            train_step(
                 forward_step_func, train_data_iterator, model, optimizer, lr_scheduler
             )
         if args.use_timer:
             timers('train_step').stop()
             timers('iteration').stop()
-        print(prof.key_averages().table(sort_by='cpu_time_total', row_limit=100))
+        if profile_on:
+            print(prof.key_averages().table(sort_by='cpu_time_total', row_limit=100))
+            del prof
         if args.use_timer:
             timers('iteration').start()
-        del prof
         iteration += 1
         args.iteration = iteration
         new_samples = (
@@ -1412,6 +1424,8 @@ def train(
         if args.save and args.save_interval and iteration % args.save_interval == 0:
             save_checkpoint_and_time(iteration, model, optimizer, lr_scheduler)
             saved_checkpoint = True
+
+        mpu.random.dump_rng_state('after training step')
 
         # Exiting based on duration
         if args.exit_duration_in_mins:

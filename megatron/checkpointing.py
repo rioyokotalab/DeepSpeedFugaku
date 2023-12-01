@@ -417,11 +417,13 @@ def load_checkpoint(model, optimizer, lr_scheduler, load_arg='load', strict=True
 
     # rng states.
     if not release and not args.finetune and not args.no_load_rng:
+        print('restore rng state')
         try:
             random.setstate(state_dict['random_rng_state'])
             np.random.set_state(state_dict['np_rng_state'])
             torch.set_rng_state(state_dict['torch_rng_state'])
             if not args.no_cuda:
+                print('restore rng state for cuda')
                 get_accelerator().set_rng_state(state_dict['cuda_rng_state'])
                 # Check for empty states array
                 if not state_dict['rng_tracker_states']:
@@ -429,6 +431,7 @@ def load_checkpoint(model, optimizer, lr_scheduler, load_arg='load', strict=True
                 mpu.get_cuda_rng_tracker().set_states(
                     state_dict['rng_tracker_states'])
             else:
+                print('restore rng state for cpus')
                 # Check for empty states array
                 if not state_dict['cpus_rng_tracker_states']:
                     raise KeyError
