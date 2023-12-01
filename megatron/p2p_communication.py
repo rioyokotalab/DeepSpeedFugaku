@@ -20,6 +20,14 @@ from deepspeed.accelerator import get_accelerator
 from megatron import get_args
 from megatron import mpu
 
+reqs_send=[]
+
+def wait_all():
+    global reqs_send
+    if len(reqs_send) > 0:
+        for req in reqs_send:
+            req.wait()
+        reqs_send = []
 
 def _communicate(tensor_send_next, tensor_send_prev, recv_prev, recv_next,
                  use_ring_exchange=False):
@@ -84,31 +92,39 @@ def _communicate(tensor_send_next, tensor_send_prev, recv_prev, recv_next,
                                         tensor_send_next=tensor_send_next,
                                         tensor_recv_next=tensor_recv_next,
                                         group=mpu.get_pipeline_model_parallel_group())
-    else:
-        ops = []
+    else: 
+        global reqs_send
+        if len(reqs_send) > 0:
+            for req in reqs_send:
+                req.wait()
+            reqs_send = []
+        ops_send = []
+        ops_recv = []
         if tensor_send_prev is not None:
             send_prev_op = torch.distributed.P2POp(
                 torch.distributed.isend, tensor_send_prev,
                 mpu.get_pipeline_model_parallel_prev_rank())
-            ops.append(send_prev_op)
+            ops_send.append(send_prev_op)
         if tensor_recv_prev is not None:
             recv_prev_op = torch.distributed.P2POp(
                 torch.distributed.irecv, tensor_recv_prev,
                 mpu.get_pipeline_model_parallel_prev_rank())
-            ops.append(recv_prev_op)
+            ops_recv.append(recv_prev_op)
         if tensor_send_next is not None:
             send_next_op = torch.distributed.P2POp(
                 torch.distributed.isend, tensor_send_next,
                 mpu.get_pipeline_model_parallel_next_rank())
-            ops.append(send_next_op)
+            ops_send.append(send_next_op)
         if tensor_recv_next is not None:
             recv_next_op = torch.distributed.P2POp(
                 torch.distributed.irecv, tensor_recv_next,
                 mpu.get_pipeline_model_parallel_next_rank())
-            ops.append(recv_next_op)
-        if len(ops) > 0:
-            reqs = torch.distributed.batch_isend_irecv(ops)
-            for req in reqs:
+            ops_recv.append(recv_next_op)
+        if len(ops_send) > 0:
+            reqs_send = torch.distributed.batch_isend_irecv(ops_send)
+        if len(ops_recv) > 0:
+            reqs_recv = torch.distributed.batch_isend_irecv(ops_recv)
+            for req in reqs_recv:
                 req.wait()
     # To protect against race condition when using batch_isend_irecv().
     # torch.cuda.synchronize()

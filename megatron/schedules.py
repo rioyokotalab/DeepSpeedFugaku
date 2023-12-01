@@ -421,6 +421,8 @@ def forward_backward_pipelining_with_interleaving(forward_step_func, data_iterat
                 p2p_communication.send_backward_recv_backward(
                     input_tensor_grad, recv_next, timers))
 
+    p2p_communication.wait_all()
+
     return losses_reduced
 
 
@@ -517,5 +519,7 @@ def forward_backward_pipelining_without_interleaving(forward_step_func, data_ite
                               output_tensor_grad, model)
 
             p2p_communication.send_backward(input_tensor_grad, timers)
+
+    p2p_communication.wait_all()
 
     return losses_reduced
