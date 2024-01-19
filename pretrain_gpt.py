@@ -111,46 +111,52 @@ def get_batch(data_iterator):
         if args.use_timer:
             timers('next').start()
         # timer start
-        data = next(data_iterator)
+
+        if mpu.is_pipeline_first_stage() or mpu.is_pipeline_last_stage():
+            data = next(data_iterator)
+        else:
+            data = None
         # timer end
         if args.use_timer:
             timers('next').stop()
     else:
         data = None
 
-    if args.use_timer:
-        timers('broadcast_data').start()
-    # timer start
-    data_b = mpu.broadcast_data(keys, data, datatype)
-    # timer end
-    if args.use_timer:
-        timers('broadcast_data').stop()
+    if mpu.is_pipeline_first_stage() or mpu.is_pipeline_last_stage():
+        if args.use_timer:
+            timers('broadcast_data').start()
+        # timer start
+        data_b = mpu.broadcast_data(keys, data, datatype)
+        # timer end
+        if args.use_timer:
+            timers('broadcast_data').stop()
 
-    # Unpack.
-    if args.use_timer:
-        timers('long').start()
-    # timer start
-    tokens_ = data_b['text'].long()
-    # timer end
-    if args.use_timer:
-        timers('long').stop()
+        # Unpack.
+        if args.use_timer:
+            timers('long').start()
+        # timer start
+        tokens_ = data_b['text'].long()
+        # timer end
+        if args.use_timer:
+            timers('long').stop()
 
-    if args.use_timer:
-        timers('contiguous_labels').start()
-    # timer start
-    labels = tokens_[:, 1:].contiguous()
-    # timer end
-    if args.use_timer:
-        timers('contiguous_labels').stop()
+        if args.use_timer:
+            timers('contiguous_labels').start()
+        # timer start
+        labels = tokens_[:, 1:].contiguous()
+        # timer end
+        if args.use_timer:
+            timers('contiguous_labels').stop()
 
-    if args.use_timer:
-        timers('contiguous_tokens').start()
-    # timer start
-    tokens = tokens_[:, :-1].contiguous()
-    # timer end
-    if args.use_timer:
-        timers('contiguous_tokens').stop()
-
+        if args.use_timer:
+            timers('contiguous_tokens').start()
+        # timer start
+        tokens = tokens_[:, :-1].contiguous()
+        # timer end
+        if args.use_timer:
+            timers('contiguous_tokens').stop()
+    else:
+        tokens, labels = None, None
     # Get the masks and postition ids.
     if args.use_timer:
         timers('get_ltor_masks_and_position_ids').start()
@@ -164,7 +170,6 @@ def get_batch(data_iterator):
     # timer end
     if args.use_timer:
         timers('get_ltor_masks_and_position_ids').stop()
-
     return tokens, labels, loss_mask, attention_mask, position_ids
 
 def data_post_process(data, data_sampler_state_dict):
@@ -297,6 +302,7 @@ def forward_step(data_iterator, model):
     # timer start
     tokens, labels, loss_mask, attention_mask, position_ids = get_batch(
         data_iterator)
+
     # timer end
     if args.use_timer:
         timers('batch-generator').stop()

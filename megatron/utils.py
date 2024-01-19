@@ -18,6 +18,7 @@
 import sys
 import psutil
 import gc
+import argparse
 
 import torch
 from torch.nn.parallel import DistributedDataParallel as torchDDP
@@ -180,6 +181,12 @@ def get_ltor_masks_and_position_ids(data,
                                     eod_mask_loss):
     """Build masks and position id for left to right model."""
 
+    args: argparse.Namespace = get_args()
+    dummy_flag = False
+    if data is None:
+        data = torch.zeros((args.micro_batch_size, args.seq_length))
+        dummy_flag = True
+
     # Extract batch size and sequence length.
     micro_batch_size, seq_length = data.size()
 
@@ -195,6 +202,7 @@ def get_ltor_masks_and_position_ids(data,
     # Loss mask.
     loss_mask = torch.ones(data.size(), dtype=torch.float, device=data.device)
     if eod_mask_loss:
+        assert dummy_flag is False
         loss_mask[data == eod_token] = 0.0
 
     # Position ids.
@@ -206,6 +214,7 @@ def get_ltor_masks_and_position_ids(data,
         position_ids = position_ids.clone()
 
     if reset_position_ids or reset_attention_mask:
+        assert dummy_flag is False
         # Loop through the batches:
         for b in range(micro_batch_size):
 
