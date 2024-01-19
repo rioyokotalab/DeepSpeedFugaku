@@ -144,7 +144,9 @@ MODEL_PARALLEL_ARGS="--tensor-model-parallel-size $TENSOR_MODEL_PARALLEL_SIZE"
 DATA_PARALLEL_ARGS="--DDP-impl local"
 PARALLEL_ARGS="$MODEL_PARALLEL_ARGS $DATA_PARALLEL_ARGS $PIPELINE_PARALLEL_ARGS"
 
-NoCAPipe=2
+
+## checkpoint-activation setting
+NoCAPipe=4 ## # of processes in pipelining that checkpoint-activation is disabled
 SwitchRank=`expr ${PJM_NODE} \* \( ${PIPELINE_MODEL_PARALLEL_SIZE} - ${NoCAPipe} \) / ${PIPELINE_MODEL_PARALLEL_SIZE}`
 if [ ${PMIX_RANK} -ge ${SwitchRank} ]; then
   echo "Checkpoint-activation: off"
@@ -153,6 +155,18 @@ else
   echo "Checkpoint-activation: on"
   CHECKPOINT_ACTIVATIONS="--checkpoint-activations"
 fi
+
+## num-worker setting
+RightCond=$(( ${TENSOR_MODEL_PARALLEL_SIZE} * ${DATA_PARALLEL_SIZE} ))
+LeftCond=$(( ${PJM_NODE} - ${TENSOR_MODEL_PARALLEL_SIZE} * ${DATA_PARALLEL_SIZE} ))
+
+## AAAAA <= rank < BBBBB -> no data loading
+if [ ${PMIX_RANK} -ge ${RightCond} ] && [ ${PMIX_RANK} -lt ${LeftCond} ]; then
+  NUM_WORKERS="--num-workers 0"
+else
+  NUM_WORKERS="--num-workers 1"
+fi
+echo ${NUM_WORKERS}
 
 USE_CACHED_DATASET="--use-cached-dataset"
 
@@ -204,7 +218,7 @@ numactl -m 4-7 -N 4-7 \
   --no-cuda \
   $CHECKPOINT_ACTIVATIONS \
   --use-cpu-initialization \
-  --num-workers 1 \
+  ${NUM_WORKERS} \
   $PARALLEL_ARGS \
   $TENSORBOARD_ARGS \
   --log-batch-size-to-tensorboard \
