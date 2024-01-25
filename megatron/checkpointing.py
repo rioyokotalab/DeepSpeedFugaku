@@ -322,15 +322,15 @@ def load_checkpoint(model, optimizer, lr_scheduler, load_arg='load', strict=True
                             tracker_filename))
                         sys.exit()
 
-            if not args.mos and not args.kd:
-                assert iteration > 0 or release, 'error parsing metadata file {}'.format(
-                    tracker_filename)
-
         # Bcast
         iteration = torch.tensor([iteration])
         torch.distributed.broadcast(iteration, 0)
         iteration = iteration[0].item()
         print("## bcast iteration: ", iteration)
+
+        if not args.mos and not args.kd:
+            assert iteration > 0 or release, 'error parsing metadata file {}'.format(
+                    tracker_filename)
 
         # Checkpoint.
         checkpoint_name = get_checkpoint_name(load_dir, iteration, release)
