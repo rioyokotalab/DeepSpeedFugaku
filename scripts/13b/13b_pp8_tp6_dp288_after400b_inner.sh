@@ -170,14 +170,15 @@ echo ${NUM_WORKERS}
 
 #USE_CACHED_DATASET="--use-cached-dataset"
 
-LOAD_PATH=$CHECKPOINT_PATH/gbs${GLOBAL_BATCH_SIZE}_ca_base
 SAVE_PATH=$CHECKPOINT_PATH/gbs${GLOBAL_BATCH_SIZE}_ca_v1
 
 if [ -n "$(ls $SAVE_PATH)" ]; then
     RESET_ITERATION=""
+    LOAD_PATH=$SAVE_PATH
 else
     # set this parameter only when there is no saved parameter
     RESET_ITERATION="--reset-iteration"
+    LOAD_PATH=$CHECKPOINT_PATH/gbs${GLOBAL_BATCH_SIZE}_ca_base
 fi
 
 export OMP_NUM_THREADS=48
